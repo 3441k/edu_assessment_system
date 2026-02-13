@@ -1,7 +1,7 @@
 """Submission management routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
+from server.database import db_session
 from server.models import Submission, Answer, Test, Question, TestQuestion
 from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_NOT_STARTED, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED
 from datetime import datetime

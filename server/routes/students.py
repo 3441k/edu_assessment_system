@@ -1,7 +1,7 @@
 """Student management routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
+from server.database import db_session
 from server.models import User
 from shared.constants import API_STUDENTS
 import bcrypt

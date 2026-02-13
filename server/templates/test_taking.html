@@ -67,7 +67,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
 <script>
-const testId = {{ test_id }};
+const testId = {{ test_id|tojson }};
 let submissionId = null;
 let testData = null;
 let timeLimit = null;
@@ -204,15 +204,38 @@ function renderAnswerInput(question, index) {
     
     switch(question.type) {
         case 'multiple_choice':
-            const choices = JSON.parse(question.content.match(/\[(.*?)\]/)?.[1] || '[]');
-            container.innerHTML = choices.map((choice, i) => `
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="radio" name="answer-${question.id}" 
-                           id="choice-${question.id}-${i}" value="${choice}" 
-                           ${savedAnswer?.answer_text === choice ? 'checked' : ''}>
-                    <label class="form-check-label" for="choice-${question.id}-${i}">${choice}</label>
-                </div>
-            `).join('');
+            // Parse choices from correct_answer JSON: {"choices": [...], "correct": "..."}
+            let choices = [];
+            try {
+                if (question.correct_answer) {
+                    const answerData = JSON.parse(question.correct_answer);
+                    if (answerData.choices && Array.isArray(answerData.choices)) {
+                        choices = answerData.choices;
+                    }
+                }
+            } catch (e) {
+                console.error('Error parsing choices:', e, 'correct_answer:', question.correct_answer);
+                // Fallback: try legacy format from content
+                try {
+                    choices = JSON.parse(question.content.match(/\[(.*?)\]/)?.[1] || '[]');
+                } catch (e2) {
+                    console.error('Error parsing legacy format:', e2);
+                    choices = [];
+                }
+            }
+            
+            if (choices.length === 0) {
+                container.innerHTML = '<div class="alert alert-warning">No choices available for this question. Please contact your instructor.</div>';
+            } else {
+                container.innerHTML = choices.map((choice, i) => `
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="answer-${question.id}" 
+                               id="choice-${question.id}-${i}" value="${choice}" 
+                               ${savedAnswer?.answer_text === choice ? 'checked' : ''}>
+                        <label class="form-check-label" for="choice-${question.id}-${i}">${choice}</label>
+                    </div>
+                `).join('');
+            }
             break;
             
         case 'code':

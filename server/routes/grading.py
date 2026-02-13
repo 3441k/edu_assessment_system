@@ -1,7 +1,7 @@
 """Grading routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
+from server.database import db_session
 from server.models import Submission, Answer, Grade, Question
 from shared.constants import API_GRADING, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED
 from datetime import datetime

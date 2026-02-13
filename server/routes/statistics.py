@@ -1,8 +1,8 @@
 """Statistics and analytics routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
-from server.models import Submission, Answer, Grade, Question, Topic, Test
+from server.database import db_session
+from server.models import User, Submission, Answer, Grade, Question, Topic, Test
 from shared.constants import API_STATISTICS
 from sqlalchemy import func
 
@@ -15,7 +15,6 @@ def require_lecturer():
     if not user_id:
         return None, jsonify({"error": "Not authenticated"}), 401
     
-    from server.models import User
     user = db_session.query(User).filter_by(id=user_id).first()
     if not user or user.role != 'lecturer':
         return None, jsonify({"error": "Only lecturers can access statistics"}), 403
@@ -105,7 +104,6 @@ def get_student_statistics():
     if error_response:
         return error_response, status
     
-    from server.models import User
     students = db_session.query(User).filter_by(role='student').all()
     
     result = []

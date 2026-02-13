@@ -1,7 +1,7 @@
 """Test management routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
+from server.database import db_session
 from server.models import Test, TestQuestion, Question
 from shared.constants import API_TESTS
 from datetime import datetime
@@ -88,6 +88,7 @@ def get_test(test_id):
             "points": tq.points if tq.points is not None else q.points,
             "type": q.type,
             "content": q.content,
+            "correct_answer": q.correct_answer,
             "test_cases": q.test_cases if q.type == 'code' else None
         })
     

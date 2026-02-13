@@ -31,7 +31,7 @@ def auto_grade_code_answer(answer: Answer, submission: Submission) -> Optional[f
         return None  # No test cases, requires manual grading
     
     # Get points
-    from server.app import db_session
+    from server.database import db_session
     test_question = db_session.query(TestQuestion).filter_by(
         test_id=submission.test_id,
         question_id=question.id

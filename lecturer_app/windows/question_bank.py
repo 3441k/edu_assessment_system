@@ -47,6 +47,11 @@ class QuestionBankWindow(QWidget):
         self.topic_filter.addItem("All Topics")
         self.topic_filter.currentIndexChanged.connect(self.filter_questions)
         filter_layout.addWidget(self.topic_filter)
+        
+        # Topic management buttons
+        manage_topics_btn = QPushButton("Manage Topics")
+        manage_topics_btn.clicked.connect(self.manage_topics)
+        filter_layout.addWidget(manage_topics_btn)
         filter_layout.addStretch()
         layout.addLayout(filter_layout)
         
@@ -153,6 +158,13 @@ class QuestionBankWindow(QWidget):
                 self.load_questions()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete question: {str(e)}")
+    
+    def manage_topics(self):
+        """Open topic management dialog."""
+        dialog = TopicManagementDialog(self, self.api_client)
+        if dialog.exec_() == QDialog.Accepted:
+            # Reload topics and questions after topic management
+            self.load_data()
 
 
 class QuestionDialog(QDialog):
@@ -267,8 +279,23 @@ class QuestionDialog(QDialog):
             self.correct_answer_edit = QLineEdit()
             self.type_layout.addWidget(self.correct_answer_edit)
             
+            # Load choices and correct answer if editing
             if self.question and self.question.get('correct_answer'):
-                self.correct_answer_edit.setText(self.question.get('correct_answer', ''))
+                try:
+                    import json
+                    correct_answer_data = json.loads(self.question['correct_answer'])
+                    if isinstance(correct_answer_data, dict):
+                        # Load choices
+                        choices = correct_answer_data.get('choices', [])
+                        self.choices_edit.setPlainText('\n'.join(choices))
+                        # Load correct answer
+                        self.correct_answer_edit.setText(correct_answer_data.get('correct', ''))
+                    else:
+                        # Legacy format: just the correct answer string
+                        self.correct_answer_edit.setText(self.question['correct_answer'])
+                except (json.JSONDecodeError, TypeError):
+                    # If not JSON, treat as legacy format
+                    self.correct_answer_edit.setText(self.question.get('correct_answer', ''))
         
         elif question_type == QUESTION_TYPE_CODE:
             self.type_layout.addWidget(QLabel("Test Cases (JSON format):"))
@@ -303,8 +330,33 @@ class QuestionDialog(QDialog):
         
         # Type-specific data
         if question_type == QUESTION_TYPE_MULTIPLE_CHOICE:
-            if hasattr(self, 'correct_answer_edit'):
-                question_data['correct_answer'] = self.correct_answer_edit.text()
+            if hasattr(self, 'choices_edit') and hasattr(self, 'correct_answer_edit'):
+                # Get choices from text edit (one per line)
+                choices_text = self.choices_edit.toPlainText().strip()
+                if not choices_text:
+                    QMessageBox.warning(self, "Error", "Please provide at least one choice")
+                    return
+                
+                choices = [choice.strip() for choice in choices_text.split('\n') if choice.strip()]
+                if not choices:
+                    QMessageBox.warning(self, "Error", "Please provide at least one choice")
+                    return
+                
+                correct_answer = self.correct_answer_edit.text().strip()
+                if not correct_answer:
+                    QMessageBox.warning(self, "Error", "Please specify the correct answer")
+                    return
+                
+                if correct_answer not in choices:
+                    QMessageBox.warning(self, "Error", "Correct answer must be one of the choices")
+                    return
+                
+                # Store as JSON: {"choices": [...], "correct": "..."}
+                import json
+                question_data['correct_answer'] = json.dumps({
+                    'choices': choices,
+                    'correct': correct_answer
+                })
         
         elif question_type == QUESTION_TYPE_CODE:
             if hasattr(self, 'test_cases_edit'):
@@ -327,4 +379,378 @@ class QuestionDialog(QDialog):
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save question: {str(e)}")
+
+
+class TopicManagementDialog(QDialog):
+    """Dialog for managing topics."""
+    
+    def __init__(self, parent, api_client):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.topics = []
+        self.init_ui()
+        self.load_topics()
+    
+    def init_ui(self):
+        """Initialize UI."""
+        self.setWindowTitle("Manage Topics")
+        self.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("Topics")
+        font = title.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        title.setFont(font)
+        header.addWidget(title)
+        header.addStretch()
+        
+        add_btn = QPushButton("Add Topic")
+        add_btn.clicked.connect(self.add_topic)
+        header.addWidget(add_btn)
+        layout.addLayout(header)
+        
+        # Topics table
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["ID", "Name", "Actions"])
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        layout.addWidget(self.table)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def load_topics(self):
+        """Load topics."""
+        try:
+            self.topics = self.api_client.get_topics()
+            self.populate_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load topics: {str(e)}")
+    
+    def populate_table(self):
+        """Populate table with topics."""
+        self.table.setRowCount(len(self.topics))
+        
+        for row, topic in enumerate(self.topics):
+            self.table.setItem(row, 0, QTableWidgetItem(str(topic['id'])))
+            self.table.setItem(row, 1, QTableWidgetItem(topic['name']))
+            
+            # Actions
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout()
+            actions_layout.setContentsMargins(0, 0, 0, 0)
+            
+            edit_btn = QPushButton("Edit")
+            edit_btn.clicked.connect(lambda checked, t=topic: self.edit_topic(t))
+            actions_layout.addWidget(edit_btn)
+            
+            delete_btn = QPushButton("Delete")
+            delete_btn.setStyleSheet("background-color: #dc3545; color: white;")
+            delete_btn.clicked.connect(lambda checked, t=topic: self.delete_topic(t))
+            actions_layout.addWidget(delete_btn)
+            
+            actions_widget.setLayout(actions_layout)
+            self.table.setCellWidget(row, 2, actions_widget)
+    
+    def add_topic(self):
+        """Add a new topic."""
+        dialog = TopicDialog(self, self.api_client)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_topics()
+    
+    def edit_topic(self, topic):
+        """Edit a topic."""
+        dialog = TopicDialog(self, self.api_client, topic)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_topics()
+    
+    def delete_topic(self, topic):
+        """Delete a topic."""
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete topic '{topic['name']}'?\n\n"
+            f"This will fail if the topic has questions assigned to it.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                self.api_client.delete_topic(topic['id'])
+                QMessageBox.information(self, "Success", "Topic deleted successfully")
+                self.load_topics()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete topic: {str(e)}")
+
+
+class TopicDialog(QDialog):
+    """Dialog for creating/editing topics."""
+    
+    def __init__(self, parent, api_client, topic=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.topic = topic
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize UI."""
+        self.setWindowTitle("Edit Topic" if self.topic else "Add Topic")
+        self.setMinimumSize(400, 200)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Name
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Topic Name:"))
+        self.name_edit = QLineEdit()
+        if self.topic:
+            self.name_edit.setText(self.topic.get('name', ''))
+        name_layout.addWidget(self.name_edit)
+        layout.addLayout(name_layout)
+        
+        # Description
+        desc_layout = QVBoxLayout()
+        desc_layout.addWidget(QLabel("Description:"))
+        self.desc_edit = QTextEdit()
+        self.desc_edit.setMaximumHeight(100)
+        if self.topic:
+            self.desc_edit.setPlainText(self.topic.get('description', ''))
+        desc_layout.addWidget(self.desc_edit)
+        layout.addLayout(desc_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self.save_topic)
+        button_layout.addWidget(save_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def save_topic(self):
+        """Save topic."""
+        name = self.name_edit.text().strip()
+        description = self.desc_edit.toPlainText().strip()
+        
+        if not name:
+            QMessageBox.warning(self, "Error", "Topic name is required")
+            return
+        
+        try:
+            if self.topic:
+                self.api_client.update_topic(self.topic['id'], name, description)
+                QMessageBox.information(self, "Success", "Topic updated successfully")
+            else:
+                self.api_client.create_topic(name, description)
+                QMessageBox.information(self, "Success", "Topic created successfully")
+            
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save topic: {str(e)}")
+
+
+class TopicManagementDialog(QDialog):
+    """Dialog for managing topics."""
+    
+    def __init__(self, parent, api_client):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.topics = []
+        self.init_ui()
+        self.load_topics()
+    
+    def init_ui(self):
+        """Initialize UI."""
+        self.setWindowTitle("Manage Topics")
+        self.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Header
+        header = QHBoxLayout()
+        title = QLabel("Topics")
+        font = title.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        title.setFont(font)
+        header.addWidget(title)
+        header.addStretch()
+        
+        add_btn = QPushButton("Add Topic")
+        add_btn.clicked.connect(self.add_topic)
+        header.addWidget(add_btn)
+        layout.addLayout(header)
+        
+        # Topics table
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["ID", "Name", "Actions"])
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        layout.addWidget(self.table)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def load_topics(self):
+        """Load topics."""
+        try:
+            self.topics = self.api_client.get_topics()
+            self.populate_table()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load topics: {str(e)}")
+    
+    def populate_table(self):
+        """Populate table with topics."""
+        self.table.setRowCount(len(self.topics))
+        
+        for row, topic in enumerate(self.topics):
+            self.table.setItem(row, 0, QTableWidgetItem(str(topic['id'])))
+            self.table.setItem(row, 1, QTableWidgetItem(topic['name']))
+            
+            # Actions
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout()
+            actions_layout.setContentsMargins(0, 0, 0, 0)
+            
+            edit_btn = QPushButton("Edit")
+            edit_btn.clicked.connect(lambda checked, t=topic: self.edit_topic(t))
+            actions_layout.addWidget(edit_btn)
+            
+            delete_btn = QPushButton("Delete")
+            delete_btn.setStyleSheet("background-color: #dc3545; color: white;")
+            delete_btn.clicked.connect(lambda checked, t=topic: self.delete_topic(t))
+            actions_layout.addWidget(delete_btn)
+            
+            actions_widget.setLayout(actions_layout)
+            self.table.setCellWidget(row, 2, actions_widget)
+    
+    def add_topic(self):
+        """Add a new topic."""
+        dialog = TopicDialog(self, self.api_client)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_topics()
+    
+    def edit_topic(self, topic):
+        """Edit a topic."""
+        dialog = TopicDialog(self, self.api_client, topic)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_topics()
+    
+    def delete_topic(self, topic):
+        """Delete a topic."""
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete topic '{topic['name']}'?\n\n"
+            f"This will fail if the topic has questions assigned to it.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                self.api_client.delete_topic(topic['id'])
+                QMessageBox.information(self, "Success", "Topic deleted successfully")
+                self.load_topics()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete topic: {str(e)}")
+
+
+class TopicDialog(QDialog):
+    """Dialog for creating/editing topics."""
+    
+    def __init__(self, parent, api_client, topic=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.topic = topic
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize UI."""
+        self.setWindowTitle("Edit Topic" if self.topic else "Add Topic")
+        self.setMinimumSize(400, 200)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Name
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel("Topic Name:"))
+        self.name_edit = QLineEdit()
+        if self.topic:
+            self.name_edit.setText(self.topic.get('name', ''))
+        name_layout.addWidget(self.name_edit)
+        layout.addLayout(name_layout)
+        
+        # Description
+        desc_layout = QVBoxLayout()
+        desc_layout.addWidget(QLabel("Description:"))
+        self.desc_edit = QTextEdit()
+        self.desc_edit.setMaximumHeight(100)
+        if self.topic:
+            self.desc_edit.setPlainText(self.topic.get('description', ''))
+        desc_layout.addWidget(self.desc_edit)
+        layout.addLayout(desc_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self.save_topic)
+        button_layout.addWidget(save_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def save_topic(self):
+        """Save topic."""
+        name = self.name_edit.text().strip()
+        description = self.desc_edit.toPlainText().strip()
+        
+        if not name:
+            QMessageBox.warning(self, "Error", "Topic name is required")
+            return
+        
+        try:
+            if self.topic:
+                self.api_client.update_topic(self.topic['id'], name, description)
+                QMessageBox.information(self, "Success", "Topic updated successfully")
+            else:
+                self.api_client.create_topic(name, description)
+                QMessageBox.information(self, "Success", "Topic created successfully")
+            
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save topic: {str(e)}")
 

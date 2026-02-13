@@ -14,9 +14,10 @@ from lecturer_app.windows.student_management import StudentManagementWindow
 class MainWindow(QMainWindow):
     """Main window for lecturer application."""
     
-    def __init__(self):
+    def __init__(self, api_client=None):
         super().__init__()
-        self.api_client = LecturerAPIClient()
+        # Use provided API client (with session cookies) or create new one
+        self.api_client = api_client if api_client else LecturerAPIClient()
         self.init_ui()
         self.check_connection()
     

@@ -64,7 +64,18 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         const data = await response.json();
         
         if (response.ok) {
-            window.location.href = '/dashboard';
+            // Check if user is a student before redirecting
+            if (data.user && data.user.role === 'student') {
+                // Small delay to ensure session cookie is set
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 100);
+            } else {
+                errorDiv.textContent = 'This login page is for students only. Lecturers should use the desktop application.';
+                errorDiv.style.display = 'block';
+                // Clear any session
+                fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
+            }
         } else {
             errorDiv.textContent = data.error || 'Login failed';
             errorDiv.style.display = 'block';

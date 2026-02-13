@@ -1,31 +1,47 @@
 """Main Flask application."""
 
 import os
-from flask import Flask
+import sys
+from pathlib import Path
+
+# Add project root to Python path if running directly
+if __name__ == "__main__":
+    project_root = Path(__file__).parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+from flask import Flask, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session
+from server.database import db_session, DATABASE_PATH
 
 load_dotenv()
 
 # Configuration
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", 5000))
-DATABASE_PATH = os.getenv("DATABASE_PATH", "database/assessment.db")
 
 # Create Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_PATH'] = '/'
+app.config['SESSION_COOKIE_DOMAIN'] = None  # Allow cookies for localhost
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours in seconds
 
 # Enable CORS for local network access
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
-
-# Database setup
-engine = create_engine(f"sqlite:///{DATABASE_PATH}", echo=False)
-db_session = scoped_session(sessionmaker(bind=engine))
+# For same-origin requests (web interface from same server), CORS isn't needed
+# But we enable it for API access from desktop apps or other origins
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "http://0.0.0.0:5000", "*"],
+        "supports_credentials": True,
+        "allow_headers": ["Content-Type"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    }
+}, supports_credentials=True, expose_headers=["Content-Type"])
 
 
 @app.teardown_appcontext
@@ -50,7 +66,13 @@ app.register_blueprint(web.bp)
 
 @app.route('/')
 def index():
-    """Root endpoint."""
+    """Root endpoint - redirect to student login."""
+    return redirect(url_for('web.login'))
+
+
+@app.route('/api')
+def api_info():
+    """API information endpoint."""
     return {
         "message": "Educational Assessment System API",
         "version": "1.0.0",

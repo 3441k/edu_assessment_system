@@ -1,7 +1,7 @@
 """Authentication routes."""
 
 from flask import Blueprint, request, jsonify, session
-from server.app import db_session
+from server.database import db_session
 from server.models import User
 from shared.constants import API_AUTH
 import bcrypt
@@ -33,12 +33,16 @@ def login():
     if user.role == 'student' and student_id and user.student_id != student_id:
         return jsonify({"error": "Invalid student ID"}), 401
     
-    # Create session
+    # Create session - Flask will automatically save it at the end of the request
+    session.permanent = True
     session['user_id'] = user.id
     session['username'] = user.username
     session['role'] = user.role
+    # Explicitly mark session as modified to ensure it's saved
+    session.modified = True
     
-    return jsonify({
+    # Create response and ensure session is saved
+    response = jsonify({
         "message": "Login successful",
         "user": {
             "id": user.id,
@@ -46,7 +50,10 @@ def login():
             "role": user.role,
             "student_id": user.student_id
         }
-    }), 200
+    })
+    
+    # Ensure session cookie is included in response
+    return response, 200
 
 
 @bp.route('/logout', methods=['POST'])

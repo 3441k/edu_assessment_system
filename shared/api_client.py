@@ -12,6 +12,8 @@ class APIClient:
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
+        # Ensure cookies are handled properly
+        self.session.cookies.clear()
     
     def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, 
                      files: Optional[Dict] = None) -> Dict[str, Any]:
@@ -44,7 +46,17 @@ class APIClient:
         data = {"username": username, "password": password}
         if student_id:
             data["student_id"] = student_id
-        return self._make_request('POST', f"{API_BASE}/auth/login", data)
+        
+        url = f"{self.base_url}{API_BASE}/auth/login"
+        response = self.session.post(url, json=data)
+        response.raise_for_status()
+        
+        # Cookies should be automatically stored by requests.Session
+        # Verify cookies were set
+        if not self.session.cookies:
+            raise Exception("Login succeeded but no session cookie was received")
+        
+        return response.json() if response.content else {}
     
     def logout(self) -> Dict:
         """Logout from the system."""

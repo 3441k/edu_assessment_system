@@ -38,12 +38,20 @@ python database/init_db.py
 
 4. Start the Flask server:
 ```bash
-python server/app.py
+# Using the run script (recommended)
+./run_server.py
+# Or directly with Python 3.12
+/home/hlnb/.pyenv/versions/3.12.0/bin/python3.12 run_server.py
+# Or using python module
+python -m server.app
 ```
 
 5. Run the lecturer application:
 ```bash
-python lecturer_app/main.py
+# Using the run script (recommended)
+./run_lecturer.py
+# Or directly
+/home/hlnb/.pyenv/versions/3.12.0/bin/python3.12 run_lecturer.py
 ```
 
 6. Access student web interface:
@@ -51,7 +59,10 @@ Open browser and navigate to `http://localhost:5000`
 
 7. Run student desktop application:
 ```bash
-python student_app/main.py
+# Using the run script (recommended)
+./run_student.py
+# Or directly
+/home/hlnb/.pyenv/versions/3.12.0/bin/python3.12 run_student.py
 ```
 
 ## Configuration

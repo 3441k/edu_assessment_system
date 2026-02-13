@@ -219,7 +219,13 @@ class GradingDialog(QDialog):
         score_spin = QDoubleSpinBox()
         score_spin.setMinimum(0)
         score_spin.setMaximum(q_data.get('points', 100))
-        score_spin.setValue(answer.get('score', 0) if answer else 0)
+        # Handle None score (ungraded answers)
+        score_value = 0.0
+        if answer:
+            score = answer.get('score')
+            if score is not None:
+                score_value = float(score)
+        score_spin.setValue(score_value)
         score_spin.setSuffix(f" / {q_data.get('points', 0)}")
         grading_layout.addWidget(score_spin)
         grading_layout.addStretch()

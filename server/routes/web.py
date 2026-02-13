@@ -1,7 +1,7 @@
 """Web routes for student interface."""
 
 from flask import Blueprint, render_template, redirect, url_for, session, request
-from server.app import db_session
+from server.database import db_session
 from server.models import User, Test, Submission
 
 bp = Blueprint('web', __name__)
@@ -23,8 +23,15 @@ def require_student():
 @bp.route('/login')
 def login():
     """Student login page."""
-    if session.get('user_id'):
-        return redirect(url_for('web.dashboard'))
+    user_id = session.get('user_id')
+    if user_id:
+        # Check if user is a student
+        user = db_session.query(User).filter_by(id=user_id).first()
+        if user and user.role == 'student':
+            return redirect(url_for('web.dashboard'))
+        else:
+            # Lecturer or invalid user - clear session and show login
+            session.clear()
     return render_template('login.html')
 
 
