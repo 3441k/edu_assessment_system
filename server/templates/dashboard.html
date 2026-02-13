@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Assessment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">
+            <i class="fas fa-tachometer-alt me-2"></i>My Tests
+        </h2>
+    </div>
+</div>
+
+<div id="testsContainer" class="row">
+    <div class="col-12 text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadTests() {
+    try {
+        const response = await fetch('/api/v1/tests', {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error('Failed to load tests');
+        }
+        
+        const tests = await response.json();
+        const container = document.getElementById('testsContainer');
+        
+        if (tests.length === 0) {
+            container.innerHTML = '<div class="col-12"><div class="alert alert-info">No tests available.</div></div>';
+            return;
+        }
+        
+        container.innerHTML = tests.map(test => {
+            const status = test.submission_status || 'not_started';
+            const statusClass = {
+                'not_started': 'secondary',
+                'in_progress': 'warning',
+                'submitted': 'info',
+                'graded': 'success'
+            }[status] || 'secondary';
+            
+            const statusText = {
+                'not_started': 'Not Started',
+                'in_progress': 'In Progress',
+                'submitted': 'Submitted',
+                'graded': 'Graded'
+            }[status] || 'Unknown';
+            
+            let actionButton = '';
+            if (status === 'not_started' || status === 'in_progress') {
+                actionButton = `<a href="/test/${test.id}" class="btn btn-primary">${status === 'not_started' ? 'Start Test' : 'Continue Test'}</a>`;
+            } else if (status === 'submitted') {
+                actionButton = `<span class="badge bg-info">Submitted - Awaiting Grading</span>`;
+            } else if (status === 'graded') {
+                actionButton = `<a href="/results/${test.submission_id}" class="btn btn-success">View Results</a>`;
+            }
+            
+            return `
+                <div class="col-md-6 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">${test.name}</h5>
+                            <p class="card-text text-muted">${test.description || ''}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-${statusClass}">${statusText}</span>
+                                ${actionButton}
+                            </div>
+                            ${test.time_limit ? `<small class="text-muted d-block mt-2"><i class="fas fa-clock me-1"></i>Time limit: ${test.time_limit} minutes</small>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error loading tests:', error);
+        document.getElementById('testsContainer').innerHTML = 
+            '<div class="col-12"><div class="alert alert-danger">Error loading tests. Please refresh the page.</div></div>';
+    }
+}
+
+// Check authentication on load
+async function checkAuth() {
+    try {
+        const response = await fetch('/api/v1/auth/me', {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            window.location.href = '/login';
+            return;
+        }
+        
+        loadTests();
+    } catch (error) {
+        window.location.href = '/login';
+    }
+}
+
+checkAuth();
+</script>
+{% endblock %}
+

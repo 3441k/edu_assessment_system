@@ -1,0 +1,2 @@
+"""Widgets for lecturer application."""
+

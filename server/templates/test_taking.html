@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Take Test - Assessment System{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+<style>
+    .question-card {
+        margin-bottom: 20px;
+    }
+    .question-nav {
+        position: sticky;
+        top: 20px;
+    }
+    .CodeMirror {
+        height: 300px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    #drawingCanvas {
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        cursor: crosshair;
+    }
+    .timer {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 id="testName">Loading...</h4>
+                <div id="timer" class="timer"></div>
+            </div>
+            <div class="card-body">
+                <div id="questionsContainer"></div>
+                <div class="mt-4">
+                    <button id="saveBtn" class="btn btn-secondary me-2">
+                        <i class="fas fa-save me-1"></i>Save Progress
+                    </button>
+                    <button id="submitBtn" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-1"></i>Submit Test
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card question-nav">
+            <div class="card-header">
+                <h5>Questions</h5>
+            </div>
+            <div class="card-body">
+                <div id="questionNav"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+<script>
+const testId = {{ test_id }};
+let submissionId = null;
+let testData = null;
+let timeLimit = null;
+let timeRemaining = null;
+let timerInterval = null;
+let codeEditors = {};
+let currentQuestion = 0;
+
+async function loadTest() {
+    try {
+        const response = await fetch(`/api/v1/tests/${testId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load test');
+        }
+        
+        testData = await response.json();
+        document.getElementById('testName').textContent = testData.name;
+        timeLimit = testData.time_limit;
+        
+        // Create or get submission
+        await createSubmission();
+        
+        // Load existing answers
+        await loadAnswers();
+        
+        // Render questions
+        renderQuestions();
+        
+        // Start timer if time limit exists
+        if (timeLimit) {
+            startTimer();
+        }
+        
+    } catch (error) {
+        console.error('Error loading test:', error);
+        alert('Error loading test. Please refresh the page.');
+    }
+}
+
+async function createSubmission() {
+    try {
+        // Check for existing submission
+        const submissionsResponse = await fetch(`/api/v1/submissions?test_id=${testId}`, {
+            credentials: 'include'
+        });
+        
+        if (submissionsResponse.ok) {
+            const submissions = await submissionsResponse.json();
+            const inProgress = submissions.find(s => s.status === 'in_progress');
+            if (inProgress) {
+                submissionId = inProgress.id;
+                return;
+            }
+        }
+        
+        // Create new submission
+        const response = await fetch('/api/v1/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ test_id: testId })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            submissionId = data.id;
+        }
+    } catch (error) {
+        console.error('Error creating submission:', error);
+    }
+}
+
+async function loadAnswers() {
+    if (!submissionId) return;
+    
+    try {
+        const response = await fetch(`/api/v1/submissions/${submissionId}`, {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const submission = await response.json();
+            // Store answers for later use
+            window.savedAnswers = {};
+            submission.answers.forEach(answer => {
+                window.savedAnswers[answer.question_id] = answer;
+            });
+        }
+    } catch (error) {
+        console.error('Error loading answers:', error);
+    }
+}
+
+function renderQuestions() {
+    const container = document.getElementById('questionsContainer');
+    const nav = document.getElementById('questionNav');
+    
+    container.innerHTML = '';
+    nav.innerHTML = '';
+    
+    testData.questions.forEach((question, index) => {
+        // Question card
+        const questionCard = document.createElement('div');
+        questionCard.className = 'question-card';
+        questionCard.id = `question-${question.id}`;
+        questionCard.style.display = index === 0 ? 'block' : 'none';
+        
+        questionCard.innerHTML = `
+            <h5>Question ${index + 1} (${question.points} points)</h5>
+            <p>${question.content}</p>
+            <div id="answer-${question.id}"></div>
+        `;
+        
+        container.appendChild(questionCard);
+        
+        // Render answer input based on type
+        renderAnswerInput(question, index);
+        
+        // Navigation button
+        const navBtn = document.createElement('button');
+        navBtn.className = 'btn btn-sm btn-outline-primary w-100 mb-2';
+        navBtn.textContent = `Q${index + 1}`;
+        navBtn.onclick = () => showQuestion(index);
+        nav.appendChild(navBtn);
+    });
+}
+
+function renderAnswerInput(question, index) {
+    const container = document.getElementById(`answer-${question.id}`);
+    const savedAnswer = window.savedAnswers?.[question.id];
+    
+    switch(question.type) {
+        case 'multiple_choice':
+            const choices = JSON.parse(question.content.match(/\[(.*?)\]/)?.[1] || '[]');
+            container.innerHTML = choices.map((choice, i) => `
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="answer-${question.id}" 
+                           id="choice-${question.id}-${i}" value="${choice}" 
+                           ${savedAnswer?.answer_text === choice ? 'checked' : ''}>
+                    <label class="form-check-label" for="choice-${question.id}-${i}">${choice}</label>
+                </div>
+            `).join('');
+            break;
+            
+        case 'code':
+            container.innerHTML = `<textarea id="code-${question.id}" class="form-control"></textarea>`;
+            const codeEditor = CodeMirror.fromTextArea(document.getElementById(`code-${question.id}`), {
+                mode: 'python',
+                theme: 'monokai',
+                lineNumbers: true,
+                indentUnit: 4
+            });
+            codeEditors[question.id] = codeEditor;
+            if (savedAnswer?.code) {
+                codeEditor.setValue(savedAnswer.code);
+            }
+            break;
+            
+        case 'diagram':
+            container.innerHTML = `
+                <canvas id="canvas-${question.id}" width="600" height="400"></canvas>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-secondary" onclick="clearCanvas(${question.id})">Clear</button>
+                </div>
+            `;
+            initCanvas(question.id);
+            if (savedAnswer?.diagram_data) {
+                loadCanvas(question.id, savedAnswer.diagram_data);
+            }
+            break;
+            
+        case 'text':
+            container.innerHTML = `
+                <textarea id="text-${question.id}" class="form-control" rows="6">${savedAnswer?.answer_text || ''}</textarea>
+            `;
+            break;
+    }
+}
+
+function showQuestion(index) {
+    testData.questions.forEach((q, i) => {
+        document.getElementById(`question-${q.id}`).style.display = i === index ? 'block' : 'none';
+    });
+    currentQuestion = index;
+}
+
+function startTimer() {
+    if (!timeLimit) return;
+    
+    // Calculate remaining time (simplified - in real app, track start time)
+    timeRemaining = timeLimit * 60; // Convert to seconds
+    
+    timerInterval = setInterval(() => {
+        timeRemaining--;
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        document.getElementById('timer').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (timeRemaining <= 0) {
+            clearInterval(timerInterval);
+            alert('Time is up! Submitting test...');
+            submitTest();
+        }
+    }, 1000);
+}
+
+async function saveProgress() {
+    if (!submissionId) return;
+    
+    for (const question of testData.questions) {
+        let answerData = {};
+        
+        switch(question.type) {
+            case 'multiple_choice':
+                const selected = document.querySelector(`input[name="answer-${question.id}"]:checked`);
+                if (selected) {
+                    answerData.answer_text = selected.value;
+                }
+                break;
+            case 'code':
+                if (codeEditors[question.id]) {
+                    answerData.code = codeEditors[question.id].getValue();
+                }
+                break;
+            case 'diagram':
+                const canvas = document.getElementById(`canvas-${question.id}`);
+                answerData.diagram_data = canvas.toDataURL();
+                break;
+            case 'text':
+                answerData.answer_text = document.getElementById(`text-${question.id}`).value;
+                break;
+        }
+        
+        if (Object.keys(answerData).length > 0) {
+            answerData.question_id = question.id;
+            
+            try {
+                await fetch(`/api/v1/submissions/${submissionId}/answers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(answerData)
+                });
+            } catch (error) {
+                console.error('Error saving answer:', error);
+            }
+        }
+    }
+    
+    alert('Progress saved!');
+}
+
+async function submitTest() {
+    if (!confirm('Are you sure you want to submit? You cannot modify answers after submission.')) {
+        return;
+    }
+    
+    // Save all answers first
+    await saveProgress();
+    
+    // Submit
+    try {
+        const response = await fetch(`/api/v1/submissions/${submissionId}/submit`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            if (timerInterval) clearInterval(timerInterval);
+            window.location.href = '/dashboard';
+        } else {
+            alert('Error submitting test. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error submitting test:', error);
+        alert('Error submitting test. Please try again.');
+    }
+}
+
+// Canvas drawing functions
+let canvasContexts = {};
+let isDrawing = false;
+
+function initCanvas(questionId) {
+    const canvas = document.getElementById(`canvas-${questionId}`);
+    const ctx = canvas.getContext('2d');
+    canvasContexts[questionId] = ctx;
+    
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    
+    canvas.addEventListener('mousedown', (e) => {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        ctx.beginPath();
+        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.stroke();
+    });
+    
+    canvas.addEventListener('mouseup', () => {
+        isDrawing = false;
+    });
+}
+
+function clearCanvas(questionId) {
+    const canvas = document.getElementById(`canvas-${questionId}`);
+    const ctx = canvasContexts[questionId];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function loadCanvas(questionId, dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.getElementById(`canvas-${questionId}`);
+        const ctx = canvasContexts[questionId];
+        ctx.drawImage(img, 0, 0);
+    };
+    img.src = dataUrl;
+}
+
+document.getElementById('saveBtn').addEventListener('click', saveProgress);
+document.getElementById('submitBtn').addEventListener('click', submitTest);
+
+// Auto-save every 30 seconds
+setInterval(saveProgress, 30000);
+
+loadTest();
+</script>
+{% endblock %}
+

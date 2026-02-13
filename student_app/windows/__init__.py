@@ -1,0 +1,2 @@
+"""Windows for student application."""
+

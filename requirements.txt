@@ -1,0 +1,22 @@
+# Backend
+Flask==3.0.0
+Flask-CORS==4.0.0
+SQLAlchemy==2.0.23
+bcrypt==4.1.1
+python-dotenv==1.0.0
+
+# Desktop Applications (Lecturer & Student)
+PyQt5==5.15.10
+QScintilla==2.13.3
+requests==2.31.0
+
+# Code Execution
+psutil==5.9.6
+
+# Reporting
+reportlab==4.0.7
+pandas==2.1.4
+
+# Web Interface
+Jinja2==3.1.2
+

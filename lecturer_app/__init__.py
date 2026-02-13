@@ -1,0 +1,2 @@
+"""Lecturer desktop application."""
+

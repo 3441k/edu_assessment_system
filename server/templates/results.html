@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Test Results - Assessment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Test Results</h2>
+    </div>
+</div>
+
+<div id="resultsContainer" class="row">
+    <div class="col-12 text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+const submissionId = {{ submission_id }};
+
+async function loadResults() {
+    try {
+        const response = await fetch(`/api/v1/submissions/${submissionId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load results');
+        }
+        
+        const submission = await response.json();
+        
+        // Get grade if available
+        let grade = null;
+        if (submission.status === 'graded') {
+            const gradeResponse = await fetch(`/api/v1/grading/submissions/${submissionId}`, {
+                credentials: 'include'
+            });
+            if (gradeResponse.ok) {
+                grade = await gradeResponse.json();
+            }
+        }
+        
+        renderResults(submission, grade);
+        
+    } catch (error) {
+        console.error('Error loading results:', error);
+        document.getElementById('resultsContainer').innerHTML = 
+            '<div class="alert alert-danger">Error loading results.</div>';
+    }
+}
+
+function renderResults(submission, grade) {
+    const container = document.getElementById('resultsContainer');
+    
+    let gradeHtml = '';
+    if (grade) {
+        gradeHtml = `
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h4>Final Grade</h4>
+                    <h2 class="text-primary">${grade.total_score} / ${grade.max_score} (${grade.percentage.toFixed(1)}%)</h2>
+                </div>
+            </div>
+        `;
+    } else {
+        gradeHtml = '<div class="alert alert-info">Results are being graded. Please check back later.</div>';
+    }
+    
+    let answersHtml = '';
+    if (submission.answers && submission.answers.length > 0) {
+        answersHtml = submission.answers.map((answer, index) => {
+            let answerContent = '';
+            
+            if (answer.code) {
+                answerContent = `<pre><code>${escapeHtml(answer.code)}</code></pre>`;
+            } else if (answer.diagram_data) {
+                answerContent = `<img src="${answer.diagram_data}" class="img-fluid" alt="Diagram">`;
+            } else if (answer.answer_text) {
+                answerContent = `<p>${escapeHtml(answer.answer_text)}</p>`;
+            }
+            
+            return `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5>Question ${index + 1}</h5>
+                        ${answerContent}
+                        ${answer.score !== null ? `<p><strong>Score:</strong> ${answer.score}</p>` : ''}
+                        ${answer.feedback ? `<p><strong>Feedback:</strong> ${escapeHtml(answer.feedback)}</p>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    container.innerHTML = gradeHtml + answersHtml + 
+        '<div class="mt-4"><a href="/dashboard" class="btn btn-primary">Back to Dashboard</a></div>';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+loadResults();
+</script>
+{% endblock %}
+
