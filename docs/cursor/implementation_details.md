@@ -481,19 +481,26 @@ app.config['SESSION_COOKIE_NAME'] = 'assessment_session'
 ## Deployment Notes
 
 ### Local Network Setup
-1. Ensure Flask server is accessible on network interface (0.0.0.0)
-2. Configure firewall to allow port 5000
-3. Students access via `http://<server-ip>:5000/login`
-4. Lecturers access via `http://<server-ip>:5000/lecturer/login`
-5. Desktop apps configured with server URL
+1. Install dependencies: `pip install -r requirements.txt`
+2. Set `SERVER_HOST=0.0.0.0` in `.env`
+3. Start with **`python run_server_production.py`** (Waitress, debug off) for classroom use (~10–15 users)
+4. Use `python run_server.py` only for local development
+5. Configure firewall to allow port 5000
+6. Students: `http://<server-ip>:5000/login` — Lecturers: `http://<server-ip>:5000/lecturer/login`
+
+### SQLite concurrency (classroom)
+- `database/migrate.py` enables **WAL journal mode** and `busy_timeout` on startup
+- `server/database.py` applies the same pragmas on each connection
+- Use a **single** server process (`run_server_production.py`); do not run multiple workers against one SQLite file
+- Optional env: `SERVER_THREADS=8`, `SQLITE_BUSY_TIMEOUT_MS=30000`
 
 ### Database Backup
 - SQLite database is single file: `database/assessment.db`
+- With WAL enabled, `assessment.db-wal` and `assessment.db-shm` may appear alongside the main file — back up all three for a consistent snapshot while running, or stop the server first
 - Regular backups recommended
-- Can be copied while server is running (SQLite handles concurrent reads)
 
 ### Scaling Considerations
-- Current design: Single server, single database
+- Current design: Single server process, single SQLite database — suitable for ~10–15 simultaneous users on a LAN
 - For larger deployments:
   - Use PostgreSQL instead of SQLite
   - Add load balancer for multiple Flask instances

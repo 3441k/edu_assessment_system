@@ -247,6 +247,20 @@
 - `server/static/js/lecturer.js`, `server/templates/lecturer/dashboard.html`
 - `README.md`, `QUICKSTART.md`, `docs/cursor/*`
 
+## Feature: Production Server and SQLite WAL
+
+**Date**: September 2026
+**Request**: Support ~11 simultaneous users on a local classroom server
+
+**Implementation**:
+- Added `run_server_production.py` using Waitress (configurable `SERVER_THREADS`)
+- Enabled SQLite WAL mode and `busy_timeout` in `database/migrate.py` and `server/database.py`
+- Documented deployment, capacity, and troubleshooting in README and QUICKSTART
+
+**Files Changed**:
+- `run_server_production.py`, `requirements.txt`, `server/database.py`, `database/migrate.py`
+- `README.md`, `QUICKSTART.md`, `docs/cursor/*`
+
 ## UI/UX Improvements
 
 ### Login Window Redesign

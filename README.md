@@ -44,14 +44,20 @@ python database/init_db.py
 Existing databases are migrated automatically on server startup (`database/migrate.py`).
 
 4. Start the Flask server:
+
+**Development** (auto-reload, debug messages):
 ```bash
-# Using the run script (recommended)
 ./run_server.py
-# Or directly with Python 3.12
-/home/hlnb/.pyenv/versions/3.12.0/bin/python3.12 run_server.py
-# Or using python module
-python -m server.app
+# or: python -m server.app
 ```
+
+**Classroom / local network** (~10–15 simultaneous users — recommended for live tests):
+```bash
+pip install -r requirements.txt   # includes waitress
+./run_server_production.py
+```
+
+Use `SERVER_HOST=0.0.0.0` in `.env` so students on the same Wi‑Fi can connect via `http://<your-ip>:5000/login`. SQLite WAL mode is enabled automatically for smoother concurrent saves.
 
 5. Access lecturer web interface (recommended for browser use):
 Open browser and navigate to `http://localhost:5000/lecturer/login`
@@ -84,7 +90,14 @@ SERVER_PORT=5000
 DATABASE_PATH=database/assessment.db
 CODE_EXECUTION_TIMEOUT=5
 CODE_EXECUTION_MEMORY_LIMIT=128
+# Optional — production server (run_server_production.py)
+SERVER_THREADS=8
+SQLITE_BUSY_TIMEOUT_MS=30000
 ```
+
+## Capacity (local network)
+
+Typical classroom use (**~10–15 simultaneous users**) works on a modern laptop (4 GB+ RAM) when you run `./run_server_production.py` instead of the debug server. The heaviest load is auto-grading **code** questions for many students at once. See `QUICKSTART.md` for deployment details.
 
 ## Default Credentials
 

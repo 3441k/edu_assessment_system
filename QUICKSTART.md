@@ -27,13 +27,43 @@ This creates the database with a default lecturer account:
 
 ### 1. Start the Flask Server
 
-The server must be running for all applications to work:
+The server must be running for all applications to work.
 
+**Development** (debug mode, auto-reload):
 ```bash
-python server/app.py
+python run_server.py
 ```
 
-The server will start on `http://0.0.0.0:5000` (accessible from all network interfaces).
+**Classroom / exam session** (recommended for ~10–15 students on the same network):
+```bash
+pip install -r requirements.txt
+python run_server_production.py
+```
+
+This uses [Waitress](https://docs.pylonsproject.org/projects/waitress/) (multi-threaded, no debug reloader). SQLite **WAL mode** is enabled on startup for better concurrent auto-save and submit handling.
+
+The server listens on `http://0.0.0.0:5000` when `SERVER_HOST=0.0.0.0` in `.env` (default in examples below).
+
+**Find your machine's IP** (students use this instead of `localhost`):
+```bash
+# Linux
+hostname -I | awk '{print $1}'
+```
+
+Students open: `http://<server-ip>:5000/login`  
+Lecturer opens: `http://<server-ip>:5000/lecturer/login` (same machine can use `localhost`)
+
+| Mode | Script | When to use |
+|------|--------|-------------|
+| Development | `run_server.py` | Building questions, testing alone |
+| Production | `run_server_production.py` | Live class, multiple students at once |
+
+**Rough resource use (production server host):**
+- Idle: ~80–150 MB RAM
+- 10 students taking a test: low CPU; brief spikes on submit / auto-save
+- Code auto-grading: up to 128 MB per student subprocess (configurable); stagger if many run at once
+
+**Minimum host:** 2 cores, 4 GB RAM. **Comfortable:** 4 cores, 8 GB RAM if many code questions are auto-graded.
 
 ### 2. Access Lecturer Interface
 
@@ -91,6 +121,8 @@ SERVER_PORT=5000
 DATABASE_PATH=database/assessment.db
 CODE_EXECUTION_TIMEOUT=5
 CODE_EXECUTION_MEMORY_LIMIT=128
+SERVER_THREADS=8
+SQLITE_BUSY_TIMEOUT_MS=30000
 ```
 
 ## Usage Workflow
@@ -171,6 +203,7 @@ student2,password456,STU002,CS-2024-B
 
 - **Connection errors**: Ensure the Flask server is running before starting desktop applications or using web interfaces
 - **Database errors**: Run `python database/init_db.py` to reinitialize. For existing databases, schema updates run automatically on server startup via `database/migrate.py`.
+- **Database is locked**: Use `run_server_production.py` (WAL mode is enabled automatically). Avoid running multiple server processes against the same database file.
 - **Port already in use**: Change `SERVER_PORT` in `.env` file
 - **Import errors**: Ensure all dependencies are installed: `pip install -r requirements.txt`
 - **Grading save error**: Each score must be between 0 and the question's maximum points (shown next to the score field)

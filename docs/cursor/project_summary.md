@@ -188,7 +188,8 @@ edu_assessment_system/
 │   ├── constants.py            # Shared constants
 │   ├── question_utils.py       # Answer type helpers for composite questions
 │   └── api_client.py          # Base API client class
-├── run_server.py              # Server startup script
+├── run_server.py              # Development server (Flask debug)
+├── run_server_production.py   # Classroom / LAN server (Waitress)
 ├── run_lecturer.py            # Lecturer app startup script
 ├── run_student.py             # Student app startup script
 ├── requirements.txt           # Python dependencies
