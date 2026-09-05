@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, session
 from server.database import db_session
 from server.models import Submission, Answer, Grade, Question
 from shared.constants import API_GRADING, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED
+from shared.question_utils import get_answer_types, question_has_type, format_type_label
 from datetime import datetime
 
 bp = Blueprint('grading', __name__, url_prefix=API_GRADING)
@@ -40,8 +41,16 @@ def get_submission_for_grading(submission_id):
         test_id=submission.test_id
     ).order_by(TestQuestion.order).all()
     
-    # Get answers
+    # Get answers; create placeholder rows for unanswered questions so lecturers can grade them
     answers = {a.question_id: a for a in submission.answers}
+    for tq in test_questions:
+        if tq.question_id not in answers:
+            placeholder = Answer(submission_id=submission.id, question_id=tq.question_id)
+            db_session.add(placeholder)
+            answers[tq.question_id] = placeholder
+    db_session.commit()
+    for a in answers.values():
+        db_session.refresh(a)
     
     questions_data = []
     for tq in test_questions:
@@ -51,6 +60,8 @@ def get_submission_for_grading(submission_id):
             "question_id": q.id,
             "order": tq.order,
             "type": q.type,
+            "type_label": format_type_label(q),
+            "answer_types": get_answer_types(q),
             "content": q.content,
             "points": tq.points if tq.points is not None else q.points,
             "correct_answer": q.correct_answer,
@@ -85,39 +96,45 @@ def grade_answer(answer_id):
     user, error_response, status = require_lecturer()
     if error_response:
         return error_response, status
-    
+
     answer = db_session.query(Answer).filter_by(id=answer_id).first()
     if not answer:
         return jsonify({"error": "Answer not found"}), 404
-    
-    data = request.get_json()
-    score = data.get('score')
+
+    data = request.get_json() or {}
+    score_raw = data.get('score')
     feedback = data.get('feedback')
-    
-    if score is not None:
-        # Validate score doesn't exceed max points
-        question = answer.question
-        max_points = question.points
-        # Check if test question has custom points
-        from server.models import TestQuestion, Submission
-        submission = answer.submission
-        test_question = db_session.query(TestQuestion).filter_by(
-            test_id=submission.test_id, question_id=question.id
-        ).first()
-        if test_question and test_question.points is not None:
-            max_points = test_question.points
-        
-        if score < 0 or score > max_points:
-            return jsonify({"error": f"Score must be between 0 and {max_points}"}), 400
-        
-        answer.score = score
-    
+
+    if 'score' in data:
+        if score_raw is None or score_raw == '':
+            answer.score = None
+        else:
+            try:
+                score = float(score_raw)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Score must be a number"}), 400
+
+            question = answer.question
+            max_points = question.points
+            from server.models import TestQuestion
+            submission = answer.submission
+            test_question = db_session.query(TestQuestion).filter_by(
+                test_id=submission.test_id, question_id=question.id
+            ).first()
+            if test_question and test_question.points is not None:
+                max_points = test_question.points
+
+            if score < 0 or score > max_points + 1e-9:
+                return jsonify({"error": f"Score must be between 0 and {max_points}"}), 400
+
+            answer.score = round(score, 2)
+
     if feedback is not None:
         answer.feedback = feedback
-    
+
     answer.updated_at = datetime.utcnow()
     db_session.commit()
-    
+
     return jsonify({
         "id": answer.id,
         "score": answer.score,

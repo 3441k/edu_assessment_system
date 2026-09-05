@@ -10,7 +10,8 @@ from server.services.test_schedule import (
 from server.services.live_session import (
     get_active_live_session, live_session_info, finalize_expired_live_sessions
 )
-from shared.constants import API_TESTS, TEST_MODE_LIVE, TEST_MODE_SCHEDULED
+from shared.question_utils import get_answer_types, question_has_type
+from shared.constants import TEST_MODE_SCHEDULED, TEST_MODE_LIVE, API_TESTS
 from datetime import datetime
 
 
@@ -170,9 +171,10 @@ def get_test(test_id):
             "order": tq.order,
             "points": tq.points if tq.points is not None else q.points,
             "type": q.type,
+            "answer_types": get_answer_types(q),
             "content": q.content,
             "correct_answer": q.correct_answer,
-            "test_cases": q.test_cases if q.type == 'code' else None
+            "test_cases": q.test_cases if question_has_type(q, 'code') else None
         })
     
     response = {

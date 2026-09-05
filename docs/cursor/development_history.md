@@ -39,6 +39,18 @@
 - Export functionality
 - Topic management
 
+#### Phase 5: Test Scheduling and Live Control
+- Scheduled mode with availability windows and per-student deadlines
+- Live mode with lecturer Go Live / Extend / End
+- Auto-submit on deadline expiry
+- Web UI for live controls and student locked/waiting states
+- Database migration script for existing installations
+
+#### Phase 6: Composite Questions and UX
+- Combined answer types on single questions (web question bank)
+- Student test wizard UI with Previous/Next and numbered navigation
+- Auto-submit and grading reliability fixes
+
 ## Critical Issues and Fixes
 
 ### Issue 1: Circular Import Error
@@ -228,10 +240,15 @@
 - [x] Student management
 - [x] Lecturer web dashboard (all tabs)
 - [x] Lecturer web grading workflow
+- [x] Scheduled test availability and auto-submit
+- [x] Live test Go Live / Extend / End workflow (web)
+- [x] Composite question types and student test navigation UI
+- [x] Auto-submit on timeout (idempotent submit endpoint)
+- [x] Grading score validation with clear error messages
 
 ### Known Limitations
 - Code execution sandbox could be more secure
-- No real-time collaboration
+- Live session controls (Go Live / Extend / End) are web-only; desktop app supports scheduled fields only
 - Limited diagram editing (web only)
 - Statistics calculations could be optimized
 - No automated test suite (manual testing only)
@@ -252,10 +269,10 @@
 - Better code execution sandbox
 
 ### Long Term
-- Real-time features
 - Mobile app
 - Advanced analytics
 - Integration with LMS systems
+- Live controls in lecturer desktop app
 
 ## Lessons Learned
 

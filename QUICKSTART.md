@@ -97,21 +97,37 @@ CODE_EXECUTION_MEMORY_LIMIT=128
 
 ### For Lecturers:
 
-Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`lecturer_app/main.py`). Both connect to the same API and offer the same capabilities:
+Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`lecturer_app/main.py`). Both connect to the same API.
 
 1. **Manage Topics**: Create topics to organize questions
-2. **Question Bank**: Add questions of different types (multiple choice, code, diagram, text)
+2. **Question Bank**: Add questions; select one or more answer types per question (multiple choice, text, code, diagram)
 3. **Create Tests**: Combine questions from the question bank into tests
 4. **Student Management**: Add students manually or import from CSV
-5. **Grading**: Grade submitted tests, use auto-grading for code questions
+5. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize
 6. **Statistics**: View analytics and export reports
+
+When creating questions on the web **Question Bank** tab, check one or more **answer types** to combine components on a single question (e.g. written answer + diagram).
+
+#### Test modes
+
+Each test uses one of two modes (set when creating or editing a test on the **Tests** tab):
+
+| Mode | How it works |
+|------|--------------|
+| **Scheduled** | Set `available_from` / `available_until` and an optional per-student `time_limit`. Students can start during the window; submissions auto-submit when their deadline passes. |
+| **Live** | Students see the test as locked until the lecturer starts a session. Use **Go Live** to set a global duration; all students share the same end time. **Extend** adds time; **End** closes the session early. In-progress submissions are auto-submitted when the session ends. |
+
+Live controls (Go Live / Extend / End) are available in the **lecturer web dashboard**. The desktop test editor supports scheduled availability fields; live session controls are web-only for now.
 
 ### For Students:
 
 1. **Login**: Use username, password, and optionally student ID
-2. **View Tests**: See available tests and their status
-3. **Take Test**: Answer questions, save progress, submit when done
-4. **View Results**: See grades and feedback after grading
+2. **View Tests**: See available tests and their status (open, upcoming, waiting for lecturer, live, closed)
+3. **Take Test**: One question is shown at a time; use **Previous** / **Next** or the numbered sidebar to navigate; progress auto-saves
+4. **Submit**: Use **Submit Test** on the last question, or the test auto-submits when time expires
+5. **View Results**: See grades and feedback after grading
+
+For **live** tests, the dashboard shows "Waiting for lecturer" until the session starts, then displays a shared countdown timer during the session.
 
 ## CSV Import Format
 
@@ -130,7 +146,8 @@ student2,password456,STU002
 ## Troubleshooting
 
 - **Connection errors**: Ensure the Flask server is running before starting desktop applications or using web interfaces
-- **Database errors**: Run `python database/init_db.py` to reinitialize
+- **Database errors**: Run `python database/init_db.py` to reinitialize. For existing databases, schema updates run automatically on server startup via `database/migrate.py`.
 - **Port already in use**: Change `SERVER_PORT` in `.env` file
 - **Import errors**: Ensure all dependencies are installed: `pip install -r requirements.txt`
+- **Grading save error**: Each score must be between 0 and the question's maximum points (shown next to the score field)
 

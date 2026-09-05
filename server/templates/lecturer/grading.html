@@ -36,7 +36,7 @@ const GradingPage = {
             opts.body = JSON.stringify(data);
         }
         const res = await fetch(endpoint, opts);
-        const json = res.ok && res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+        const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
         if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
         return json;
     },
@@ -45,6 +45,25 @@ const GradingPage = {
         const div = document.createElement('div');
         div.textContent = text || '';
         return div.innerHTML;
+    },
+
+    parseTextAnswerParts(answerText, types) {
+        const result = { multiple_choice: '', text: '' };
+        if (!answerText) return result;
+        if (types.includes('multiple_choice') && types.includes('text')) {
+            try {
+                const parsed = JSON.parse(answerText);
+                result.multiple_choice = parsed.multiple_choice || '';
+                result.text = parsed.text || '';
+                return result;
+            } catch {
+                result.text = answerText;
+                return result;
+            }
+        }
+        if (types.includes('multiple_choice')) result.multiple_choice = answerText;
+        if (types.includes('text')) result.text = answerText;
+        return result;
     },
 
     async init() {
@@ -68,26 +87,38 @@ const GradingPage = {
 
         document.getElementById('gradingContent').innerHTML = s.questions.map((q, i) => {
             const ans = q.answer || {};
-            let answerDisplay = '';
-            if (q.type === 'code') {
-                answerDisplay = `<pre class="bg-light p-3 rounded"><code>${this.escapeHtml(ans.code || '(no answer)')}</code></pre>`;
-            } else if (q.type === 'diagram') {
-                answerDisplay = ans.diagram_data
-                    ? `<img src="${ans.diagram_data}" class="img-fluid border rounded" style="max-height:300px">`
-                    : '<p class="text-muted">(no diagram submitted)</p>';
-            } else {
-                answerDisplay = `<p>${this.escapeHtml(ans.answer_text || '(no answer)')}</p>`;
+            const types = q.answer_types && q.answer_types.length ? q.answer_types : [q.type];
+            const textParts = this.parseTextAnswerParts(ans.answer_text, types);
+            const sections = [];
+
+            if (types.includes('multiple_choice')) {
+                sections.push(`<div class="mb-3"><h6>Multiple choice</h6><p>${this.escapeHtml(textParts.multiple_choice || '(no answer)')}</p></div>`);
             }
+            if (types.includes('text')) {
+                sections.push(`<div class="mb-3"><h6>Written answer</h6><p>${this.escapeHtml(textParts.text || '(no answer)')}</p></div>`);
+            }
+            if (types.includes('code')) {
+                sections.push(`<div class="mb-3"><h6>Code</h6><pre class="bg-light p-3 rounded"><code>${this.escapeHtml(ans.code || '(no answer)')}</code></pre></div>`);
+            }
+            if (types.includes('diagram')) {
+                sections.push(`<div class="mb-3"><h6>Diagram</h6>${
+                    ans.diagram_data
+                        ? `<img src="${ans.diagram_data}" class="img-fluid border rounded" style="max-height:300px">`
+                        : '<p class="text-muted">(no diagram submitted)</p>'
+                }</div>`);
+            }
+
+            const typeLabel = q.type_label || types.join(' + ');
 
             return `
                 <div class="card mb-3" id="question-${q.question_id}">
                     <div class="card-header d-flex justify-content-between">
-                        <span>Question ${i + 1} (${q.type}) &mdash; Max: ${q.points} pts</span>
+                        <span>Question ${i + 1} (${this.escapeHtml(typeLabel)}) &mdash; Max: ${q.points} pts</span>
                     </div>
                     <div class="card-body">
                         <p><strong>${this.escapeHtml(q.content)}</strong></p>
                         <h6>Student Answer:</h6>
-                        ${answerDisplay}
+                        ${sections.join('') || '<p class="text-muted">(no answer)</p>'}
                         <div class="row mt-3">
                             <div class="col-md-3">
                                 <label class="form-label">Score (0 - ${q.points})</label>
@@ -98,7 +129,7 @@ const GradingPage = {
                                 <textarea class="form-control feedback-input" data-answer-id="${ans.id || ''}" rows="2">${this.escapeHtml(ans.feedback || '')}</textarea>
                             </div>
                         </div>
-                        ${ans.id ? `<button class="btn btn-sm btn-primary mt-2" onclick="GradingPage.saveAnswer(${ans.id}, ${q.question_id})">Save</button>` : ''}
+                        ${`<button class="btn btn-sm btn-primary mt-2" onclick="GradingPage.saveAnswer(${ans.id}, ${q.question_id})">Save</button>`}
                     </div>
                 </div>
             `;
@@ -109,13 +140,26 @@ const GradingPage = {
 
     async saveAnswer(answerId, questionId) {
         const card = document.getElementById(`question-${questionId}`);
-        const score = card.querySelector('.score-input').value;
+        const scoreInput = card.querySelector('.score-input');
+        const scoreRaw = scoreInput.value.trim();
+        const max = parseFloat(scoreInput.dataset.max);
         const feedback = card.querySelector('.feedback-input').value;
+
+        let score = null;
+        if (scoreRaw !== '') {
+            score = parseFloat(scoreRaw);
+            if (Number.isNaN(score)) {
+                alert('Please enter a valid score.');
+                return;
+            }
+            if (score < 0 || score > max) {
+                alert(`Score must be between 0 and ${max}.`);
+                return;
+            }
+        }
+
         try {
-            await this.api('PUT', `/api/v1/grading/answers/${answerId}`, {
-                score: score === '' ? null : parseFloat(score),
-                feedback
-            });
+            await this.api('PUT', `/api/v1/grading/answers/${answerId}`, { score, feedback });
             alert('Answer saved.');
         } catch (e) {
             alert('Error: ' + e.message);
@@ -127,12 +171,21 @@ const GradingPage = {
         for (const card of cards) {
             const answerId = card.querySelector('.score-input')?.dataset.answerId;
             if (!answerId) continue;
-            const score = card.querySelector('.score-input').value;
+            const scoreInput = card.querySelector('.score-input');
+            const scoreRaw = scoreInput.value.trim();
+            const max = parseFloat(scoreInput.dataset.max);
             const feedback = card.querySelector('.feedback-input').value;
-            await this.api('PUT', `/api/v1/grading/answers/${answerId}`, {
-                score: score === '' ? 0 : parseFloat(score),
-                feedback
-            });
+
+            let score = 0;
+            if (scoreRaw !== '') {
+                score = parseFloat(scoreRaw);
+                if (Number.isNaN(score) || score < 0 || score > max) {
+                    alert(`Invalid score on one or more questions. Each score must be between 0 and its maximum.`);
+                    return;
+                }
+            }
+
+            await this.api('PUT', `/api/v1/grading/answers/${answerId}`, { score, feedback });
         }
         try {
             await this.api('POST', `/api/v1/grading/submissions/${SUBMISSION_ID}/finalize`);

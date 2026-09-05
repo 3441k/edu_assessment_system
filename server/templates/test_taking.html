@@ -6,59 +6,175 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
 <style>
-    .question-card {
-        margin-bottom: 20px;
+    .test-header {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 1rem;
+        margin-bottom: 1rem;
     }
-    .question-nav {
+    .question-progress {
+        font-size: 0.95rem;
+        color: #6c757d;
+    }
+    .timer {
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: #dc3545;
+        white-space: nowrap;
+    }
+    .question-card {
+        min-height: 320px;
+    }
+    .question-nav-panel {
         position: sticky;
         top: 20px;
     }
+    .question-nav-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+    .q-nav-btn {
+        width: 100%;
+        aspect-ratio: 1;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+        color: #495057;
+        font-weight: 600;
+        font-size: 0.9rem;
+        padding: 0;
+        transition: all 0.15s ease;
+    }
+    .q-nav-btn:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+    .q-nav-btn.current {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #fff;
+    }
+    .q-nav-btn.answered:not(.current) {
+        border-color: #198754;
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+    .nav-footer {
+        border-top: 1px solid #eee;
+        padding-top: 1.25rem;
+        margin-top: 1.5rem;
+    }
+    .save-status {
+        font-size: 0.875rem;
+        color: #6c757d;
+        min-width: 120px;
+        text-align: center;
+    }
+    .save-status.saved {
+        color: #198754;
+    }
+    .save-status.saving {
+        color: #667eea;
+    }
     .CodeMirror {
-        height: 300px;
+        width: 100% !important;
+        height: 300px !important;
         border: 1px solid #ddd;
         border-radius: 4px;
+        font-size: 14px;
     }
-    #drawingCanvas {
+    .CodeMirror-gutters {
+        border-right: 1px solid #ddd;
+        background: #272822;
+    }
+    .answer-component {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #eee;
+    }
+    .answer-component:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .canvas-wrapper {
+        width: 100%;
         border: 2px solid #ddd;
         border-radius: 4px;
+        background: #fff;
+        overflow: hidden;
+    }
+    .canvas-wrapper canvas {
+        display: block;
+        width: 100%;
         cursor: crosshair;
+        touch-action: none;
     }
-    .timer {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #dc3545;
+    .legend-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        margin-right: 4px;
+        vertical-align: middle;
     }
+    .legend-dot.current { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .legend-dot.answered { background: #d1e7dd; border: 2px solid #198754; }
+    .legend-dot.unanswered { background: #fff; border: 2px solid #dee2e6; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-md-9">
+    <div class="col-lg-9">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 id="testName">Loading...</h4>
-                <div id="timer" class="timer" style="display: none;"></div>
-            </div>
             <div class="card-body">
+                <div class="test-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <h4 id="testName" class="mb-1">Loading...</h4>
+                        <div id="questionProgress" class="question-progress">Question 1 of 1</div>
+                    </div>
+                    <div id="timer" class="timer" style="display: none;"></div>
+                </div>
+
+                <div class="progress mb-4" style="height: 6px;">
+                    <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;"></div>
+                </div>
+
                 <div id="questionsContainer"></div>
-                <div class="mt-4">
-                    <button id="saveBtn" class="btn btn-secondary me-2">
-                        <i class="fas fa-save me-1"></i>Save Progress
+
+                <div class="nav-footer d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <button id="prevBtn" class="btn btn-outline-secondary" disabled>
+                        <i class="fas fa-arrow-left me-1"></i>Previous
                     </button>
-                    <button id="submitBtn" class="btn btn-primary">
+                    <span id="saveStatus" class="save-status"></span>
+                    <button id="nextBtn" class="btn btn-primary">
+                        Next<i class="fas fa-arrow-right ms-1"></i>
+                    </button>
+                    <button id="submitBtn" class="btn btn-success" style="display: none;">
                         <i class="fas fa-paper-plane me-1"></i>Submit Test
                     </button>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card question-nav">
+
+    <div class="col-lg-3">
+        <div class="card question-nav-panel">
             <div class="card-header">
-                <h5>Questions</h5>
+                <h6 class="mb-0">Jump to question</h6>
             </div>
             <div class="card-body">
-                <div id="questionNav"></div>
+                <div id="questionNav" class="question-nav-grid mb-3"></div>
+                <div class="small text-muted">
+                    <div class="mb-1"><span class="legend-dot current"></span> Current</div>
+                    <div class="mb-1"><span class="legend-dot answered"></span> Answered</div>
+                    <div><span class="legend-dot unanswered"></span> Not answered</div>
+                </div>
+                <hr>
+                <button id="saveBtn" class="btn btn-sm btn-outline-secondary w-100">
+                    <i class="fas fa-save me-1"></i>Save progress
+                </button>
             </div>
         </div>
     </div>
@@ -70,32 +186,27 @@
 const testId = {{ test_id|tojson }};
 let submissionId = null;
 let testData = null;
-let timeLimit = null;
-let timeRemaining = null;
 let timerInterval = null;
 let codeEditors = {};
 let currentQuestion = 0;
+let saveStatusTimeout = null;
 
 async function loadTest() {
     try {
         const response = await fetch(`/api/v1/tests/${testId}`, {
             credentials: 'include'
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to load test');
         }
-        
+
         testData = await response.json();
         document.getElementById('testName').textContent = testData.name;
-        
-        // Create or get submission
+
         await createSubmission();
-        
-        // Load existing answers and timing
         await loadAnswers();
-        
-        // Start timer from server-calculated remaining time
+
         const timing = window.submissionTiming || {};
         if (timing.time_expired || testData.submission_status === 'submitted') {
             alert('Time expired. Your test has been submitted.');
@@ -110,9 +221,10 @@ async function loadTest() {
             if (remaining > 0) startTimer(remaining);
         }
 
-        // Render questions
         renderQuestions();
-        
+        showQuestion(0);
+        attachAnswerListeners();
+
     } catch (error) {
         console.error('Error loading test:', error);
         alert('Error loading test. Please refresh the page.');
@@ -121,11 +233,10 @@ async function loadTest() {
 
 async function createSubmission() {
     try {
-        // Check for existing submission
         const submissionsResponse = await fetch(`/api/v1/submissions?test_id=${testId}`, {
             credentials: 'include'
         });
-        
+
         if (submissionsResponse.ok) {
             const submissions = await submissionsResponse.json();
             const inProgress = submissions.find(s => s.status === 'in_progress');
@@ -134,15 +245,14 @@ async function createSubmission() {
                 return;
             }
         }
-        
-        // Create new submission
+
         const response = await fetch('/api/v1/submissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ test_id: testId })
         });
-        
+
         if (response.ok) {
             const data = await response.json();
             submissionId = data.id;
@@ -154,12 +264,12 @@ async function createSubmission() {
 
 async function loadAnswers() {
     if (!submissionId) return;
-    
+
     try {
         const response = await fetch(`/api/v1/submissions/${submissionId}`, {
             credentials: 'include'
         });
-        
+
         if (response.ok) {
             const submission = await response.json();
             window.savedAnswers = {};
@@ -180,44 +290,103 @@ async function loadAnswers() {
 function renderQuestions() {
     const container = document.getElementById('questionsContainer');
     const nav = document.getElementById('questionNav');
-    
+    const total = testData.questions.length;
+
     container.innerHTML = '';
     nav.innerHTML = '';
-    
+
     testData.questions.forEach((question, index) => {
-        // Question card
         const questionCard = document.createElement('div');
         questionCard.className = 'question-card';
         questionCard.id = `question-${question.id}`;
         questionCard.style.display = index === 0 ? 'block' : 'none';
-        
+
         questionCard.innerHTML = `
-            <h5>Question ${index + 1} (${question.points} points)</h5>
-            <p>${question.content}</p>
+            <h5 class="mb-3">Question ${index + 1} <span class="badge bg-light text-dark">${question.points} pts</span></h5>
+            <div class="mb-3">${question.content}</div>
             <div id="answer-${question.id}"></div>
         `;
-        
+
         container.appendChild(questionCard);
-        
-        // Render answer input based on type
-        renderAnswerInput(question, index);
-        
-        // Navigation button
+        renderAnswerInput(question);
+
         const navBtn = document.createElement('button');
-        navBtn.className = 'btn btn-sm btn-outline-primary w-100 mb-2';
-        navBtn.textContent = `Q${index + 1}`;
-        navBtn.onclick = () => showQuestion(index);
+        navBtn.type = 'button';
+        navBtn.className = 'q-nav-btn';
+        navBtn.textContent = index + 1;
+        navBtn.title = `Question ${index + 1}`;
+        navBtn.onclick = () => goToQuestion(index);
+        navBtn.id = `nav-btn-${index}`;
         nav.appendChild(navBtn);
     });
+
+    document.getElementById('questionProgress').textContent = `Question 1 of ${total}`;
 }
 
-function renderAnswerInput(question, index) {
+function getQuestionTypes(question) {
+    if (question.answer_types && question.answer_types.length) {
+        return question.answer_types;
+    }
+    if (question.type && question.type !== 'composite') {
+        return [question.type];
+    }
+    return [];
+}
+
+const TYPE_LABELS = {
+    multiple_choice: 'Multiple choice',
+    text: 'Written answer',
+    code: 'Code',
+    diagram: 'Diagram'
+};
+
+function parseTextAnswers(savedAnswer, types) {
+    const result = { multiple_choice: '', text: '' };
+    if (!savedAnswer?.answer_text) return result;
+
+    if (types.includes('multiple_choice') && types.includes('text')) {
+        try {
+            const parsed = JSON.parse(savedAnswer.answer_text);
+            result.multiple_choice = parsed.multiple_choice || '';
+            result.text = parsed.text || '';
+            return result;
+        } catch {
+            result.text = savedAnswer.answer_text;
+            return result;
+        }
+    }
+    if (types.includes('multiple_choice')) {
+        result.multiple_choice = savedAnswer.answer_text;
+    } else if (types.includes('text')) {
+        result.text = savedAnswer.answer_text;
+    }
+    return result;
+}
+
+function buildTextAnswer(types, mcValue, textValue) {
+    if (types.includes('multiple_choice') && types.includes('text')) {
+        if (!mcValue && !textValue.trim()) return null;
+        return JSON.stringify({
+            multiple_choice: mcValue || '',
+            text: textValue || ''
+        });
+    }
+    if (types.includes('multiple_choice')) return mcValue || null;
+    if (types.includes('text')) return textValue.trim() || null;
+    return null;
+}
+
+function renderAnswerInput(question) {
     const container = document.getElementById(`answer-${question.id}`);
     const savedAnswer = window.savedAnswers?.[question.id];
-    
-    switch(question.type) {
-        case 'multiple_choice':
-            // Parse choices from correct_answer JSON: {"choices": [...], "correct": "..."}
+    const types = getQuestionTypes(question);
+    const textAnswers = parseTextAnswers(savedAnswer, types);
+
+    container.innerHTML = types.map(type => {
+        const label = TYPE_LABELS[type] || type;
+        let body = '';
+
+        if (type === 'multiple_choice') {
             let choices = [];
             try {
                 if (question.correct_answer) {
@@ -227,63 +396,339 @@ function renderAnswerInput(question, index) {
                     }
                 }
             } catch (e) {
-                console.error('Error parsing choices:', e, 'correct_answer:', question.correct_answer);
-                // Fallback: try legacy format from content
                 try {
                     choices = JSON.parse(question.content.match(/\[(.*?)\]/)?.[1] || '[]');
                 } catch (e2) {
-                    console.error('Error parsing legacy format:', e2);
                     choices = [];
                 }
             }
-            
+
             if (choices.length === 0) {
-                container.innerHTML = '<div class="alert alert-warning">No choices available for this question. Please contact your instructor.</div>';
+                body = '<div class="alert alert-warning mb-0">No choices available. Contact your instructor.</div>';
             } else {
-                container.innerHTML = choices.map((choice, i) => `
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="radio" name="answer-${question.id}" 
-                               id="choice-${question.id}-${i}" value="${choice}" 
-                               ${savedAnswer?.answer_text === choice ? 'checked' : ''}>
-                        <label class="form-check-label" for="choice-${question.id}-${i}">${choice}</label>
+                body = choices.map((choice, i) => `
+                    <div class="form-check mb-2 p-2 rounded ${textAnswers.multiple_choice === choice ? 'bg-light border' : ''}">
+                        <input class="form-check-input" type="radio" name="answer-mc-${question.id}"
+                               id="choice-${question.id}-${i}" value="${escapeAttr(choice)}"
+                               ${textAnswers.multiple_choice === choice ? 'checked' : ''}>
+                        <label class="form-check-label w-100" for="choice-${question.id}-${i}">${escapeHtml(choice)}</label>
                     </div>
                 `).join('');
             }
-            break;
-            
-        case 'code':
-            container.innerHTML = `<textarea id="code-${question.id}" class="form-control"></textarea>`;
-            const codeEditor = CodeMirror.fromTextArea(document.getElementById(`code-${question.id}`), {
-                mode: 'python',
-                theme: 'monokai',
-                lineNumbers: true,
-                indentUnit: 4
-            });
-            codeEditors[question.id] = codeEditor;
-            if (savedAnswer?.code) {
-                codeEditor.setValue(savedAnswer.code);
-            }
-            break;
-            
-        case 'diagram':
-            container.innerHTML = `
-                <canvas id="canvas-${question.id}" width="600" height="400"></canvas>
-                <div class="mt-2">
-                    <button class="btn btn-sm btn-secondary" onclick="clearCanvas(${question.id})">Clear</button>
+        } else if (type === 'code') {
+            body = `<textarea id="code-${question.id}" class="form-control" rows="12">${escapeHtml(savedAnswer?.code || '')}</textarea>`;
+        } else if (type === 'diagram') {
+            body = `
+                <div class="canvas-wrapper" id="canvas-wrap-${question.id}">
+                    <canvas id="canvas-${question.id}"></canvas>
                 </div>
-            `;
-            initCanvas(question.id);
-            if (savedAnswer?.diagram_data) {
-                loadCanvas(question.id, savedAnswer.diagram_data);
-            }
-            break;
-            
-        case 'text':
-            container.innerHTML = `
-                <textarea id="text-${question.id}" class="form-control" rows="6">${savedAnswer?.answer_text || ''}</textarea>
-            `;
-            break;
+                <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="clearCanvas(${question.id})">Clear drawing</button>
+                </div>`;
+        } else if (type === 'text') {
+            body = `<textarea id="text-${question.id}" class="form-control" rows="8"
+                              placeholder="Type your answer here...">${escapeHtml(textAnswers.text || '')}</textarea>`;
+        }
+
+        return `<div class="answer-component" data-answer-type="${type}">
+            <h6 class="text-muted mb-2">${label}</h6>${body}
+        </div>`;
+    }).join('');
+}
+
+function ensureCodeEditor(questionId) {
+    if (codeEditors[questionId]) {
+        setTimeout(() => codeEditors[questionId].refresh(), 0);
+        return;
     }
+    const ta = document.getElementById(`code-${questionId}`);
+    if (!ta || ta.style.display === 'none') return;
+
+    const editor = CodeMirror.fromTextArea(ta, {
+        mode: 'python',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 4,
+        lineWrapping: true,
+    });
+    codeEditors[questionId] = editor;
+    editor.on('change', () => {
+        updateNavigation();
+        scheduleAutoSave();
+    });
+    setTimeout(() => editor.refresh(), 50);
+}
+
+function ensureCanvas(questionId, savedDataUrl) {
+    const canvas = document.getElementById(`canvas-${questionId}`);
+    const wrapper = document.getElementById(`canvas-wrap-${questionId}`);
+    if (!canvas || !wrapper) return;
+
+    if (!canvasContexts[questionId]) {
+        initCanvas(questionId);
+    }
+    resizeCanvas(questionId, savedDataUrl);
+}
+
+function resizeCanvas(questionId, savedDataUrl) {
+    const canvas = document.getElementById(`canvas-${questionId}`);
+    const wrapper = document.getElementById(`canvas-wrap-${questionId}`);
+    if (!canvas || !wrapper) return;
+
+    const width = Math.max(wrapper.clientWidth, 320);
+    const height = Math.min(420, Math.max(280, Math.round(width * 0.6)));
+    const dpr = window.devicePixelRatio || 1;
+    const existing = canvas.width > 0 ? canvas.toDataURL() : (savedDataUrl || null);
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    canvasContexts[questionId] = ctx;
+
+    if (existing) {
+        loadCanvas(questionId, existing);
+    }
+}
+
+function initQuestionInputs(question) {
+    const types = getQuestionTypes(question);
+    const saved = window.savedAnswers?.[question.id];
+
+    if (types.includes('code')) {
+        ensureCodeEditor(question.id);
+    }
+    if (types.includes('diagram')) {
+        ensureCanvas(question.id, saved?.diagram_data || null);
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function getAnswerDataForQuestion(question) {
+    const answerData = {};
+    const types = getQuestionTypes(question);
+
+    if (types.includes('multiple_choice') || types.includes('text')) {
+        const selected = document.querySelector(`input[name="answer-mc-${question.id}"]:checked`);
+        const mcValue = selected ? selected.value : '';
+        const textEl = document.getElementById(`text-${question.id}`);
+        const textValue = textEl ? textEl.value : '';
+        const built = buildTextAnswer(types, mcValue, textValue);
+        if (built) answerData.answer_text = built;
+    }
+
+    if (types.includes('code')) {
+        if (codeEditors[question.id]) {
+            const code = codeEditors[question.id].getValue();
+            if (code.trim()) answerData.code = code;
+        } else {
+            const ta = document.getElementById(`code-${question.id}`);
+            if (ta && ta.value.trim()) answerData.code = ta.value;
+        }
+    }
+
+    if (types.includes('diagram')) {
+        const canvas = document.getElementById(`canvas-${question.id}`);
+        if (canvas && canvas.width > 0 && !isCanvasBlank(canvas)) {
+            answerData.diagram_data = canvas.toDataURL();
+        }
+    }
+
+    return answerData;
+}
+
+function isCanvasBlank(canvas) {
+    const ctx = canvas.getContext('2d');
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) {
+        if (pixels[i] !== 0) return false;
+    }
+    return true;
+}
+
+function isQuestionAnswered(index) {
+    const question = testData.questions[index];
+    const saved = window.savedAnswers?.[question.id];
+    const current = getAnswerDataForQuestion(question);
+
+    if (Object.keys(current).length > 0) return true;
+    if (!saved) return false;
+
+    const types = getQuestionTypes(question);
+    if (types.includes('multiple_choice') || types.includes('text')) {
+        const parsed = parseTextAnswers(saved, types);
+        if (parsed.multiple_choice || (parsed.text && parsed.text.trim())) return true;
+    }
+    if (saved.code && saved.code.trim()) return true;
+    if (saved.diagram_data) return true;
+    return false;
+}
+
+function updateNavigation() {
+    const total = testData.questions.length;
+    const isFirst = currentQuestion === 0;
+    const isLast = currentQuestion === total - 1;
+
+    document.getElementById('prevBtn').disabled = isFirst;
+    document.getElementById('nextBtn').style.display = isLast ? 'none' : 'inline-block';
+    document.getElementById('submitBtn').style.display = isLast ? 'inline-block' : 'none';
+
+    document.getElementById('questionProgress').textContent = `Question ${currentQuestion + 1} of ${total}`;
+    const progress = total > 0 ? ((currentQuestion + 1) / total) * 100 : 0;
+    document.getElementById('progressBar').style.width = `${progress}%`;
+
+    testData.questions.forEach((q, i) => {
+        const btn = document.getElementById(`nav-btn-${i}`);
+        if (!btn) return;
+        btn.classList.toggle('current', i === currentQuestion);
+        btn.classList.toggle('answered', isQuestionAnswered(i));
+    });
+}
+
+async function saveCurrentAnswer() {
+    if (!submissionId || !testData) return true;
+
+    const question = testData.questions[currentQuestion];
+    const answerData = getAnswerDataForQuestion(question);
+    if (Object.keys(answerData).length === 0) return true;
+
+    answerData.question_id = question.id;
+    setSaveStatus('saving');
+
+    try {
+        const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(answerData)
+        });
+        if (res.status === 400) {
+            const err = await res.json();
+            if (err.auto_submitted || err.already_submitted) {
+                if (timerInterval) clearInterval(timerInterval);
+                alert('Time expired. Your test has been auto-submitted.');
+                window.location.href = '/dashboard';
+                return false;
+            }
+        }
+        if (res.ok) {
+            window.savedAnswers = window.savedAnswers || {};
+            window.savedAnswers[question.id] = { ...window.savedAnswers[question.id], ...answerData, question_id: question.id };
+            setSaveStatus('saved');
+            updateNavigation();
+        }
+    } catch (error) {
+        console.error('Error saving answer:', error);
+        setSaveStatus('');
+    }
+    return true;
+}
+
+async function saveProgress(silent = false) {
+    if (!submissionId) return false;
+
+    setSaveStatus('saving');
+    for (const question of testData.questions) {
+        const answerData = getAnswerDataForQuestion(question);
+        if (Object.keys(answerData).length === 0) continue;
+
+        answerData.question_id = question.id;
+        try {
+            const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(answerData)
+            });
+            if (res.status === 400) {
+                const err = await res.json();
+                if (err.auto_submitted || err.already_submitted) {
+                    if (timerInterval) clearInterval(timerInterval);
+                    alert('Time expired. Your test has been auto-submitted.');
+                    window.location.href = '/dashboard';
+                    return false;
+                }
+            }
+            if (res.ok) {
+                window.savedAnswers = window.savedAnswers || {};
+                window.savedAnswers[question.id] = { ...window.savedAnswers[question.id], ...answerData, question_id: question.id };
+            }
+        } catch (error) {
+            console.error('Error saving answer:', error);
+        }
+    }
+
+    updateNavigation();
+    setSaveStatus('saved');
+    if (!silent) {
+        clearTimeout(saveStatusTimeout);
+        saveStatusTimeout = setTimeout(() => setSaveStatus(''), 2000);
+    }
+    return true;
+}
+
+function setSaveStatus(state) {
+    const el = document.getElementById('saveStatus');
+    el.className = 'save-status';
+    if (state === 'saving') {
+        el.classList.add('saving');
+        el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    } else if (state === 'saved') {
+        el.classList.add('saved');
+        el.innerHTML = '<i class="fas fa-check me-1"></i>Saved';
+        clearTimeout(saveStatusTimeout);
+        saveStatusTimeout = setTimeout(() => {
+            if (el.classList.contains('saved')) setSaveStatus('');
+        }, 2500);
+    } else {
+        el.textContent = '';
+    }
+}
+
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => saveCurrentAnswer(), 1500);
+}
+
+function attachAnswerListeners() {
+    testData.questions.forEach(question => {
+        const types = getQuestionTypes(question);
+        if (types.includes('multiple_choice')) {
+            document.querySelectorAll(`input[name="answer-mc-${question.id}"]`).forEach(input => {
+                input.addEventListener('change', () => {
+                    updateNavigation();
+                    scheduleAutoSave();
+                });
+            });
+        }
+        if (types.includes('text')) {
+            const textEl = document.getElementById(`text-${question.id}`);
+            if (textEl) {
+                textEl.addEventListener('input', () => {
+                    updateNavigation();
+                    scheduleAutoSave();
+                });
+            }
+        }
+    });
 }
 
 function showQuestion(index) {
@@ -291,112 +736,95 @@ function showQuestion(index) {
         document.getElementById(`question-${q.id}`).style.display = i === index ? 'block' : 'none';
     });
     currentQuestion = index;
+
+    const question = testData.questions[index];
+    initQuestionInputs(question);
+
+    updateNavigation();
+}
+
+async function goToQuestion(index) {
+    if (index === currentQuestion) return;
+    const ok = await saveCurrentAnswer();
+    if (!ok) return;
+    showQuestion(index);
+}
+
+async function goNext() {
+    if (currentQuestion >= testData.questions.length - 1) return;
+    const ok = await saveCurrentAnswer();
+    if (!ok) return;
+    showQuestion(currentQuestion + 1);
+}
+
+async function goPrev() {
+    if (currentQuestion <= 0) return;
+    const ok = await saveCurrentAnswer();
+    if (!ok) return;
+    showQuestion(currentQuestion - 1);
 }
 
 function startTimer(seconds) {
     if (seconds == null || seconds <= 0) return;
-    
-    timeRemaining = seconds;
+
+    let timeRemaining = seconds;
     document.getElementById('timer').style.display = 'block';
-    
+
     if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-        timeRemaining--;
+    const updateDisplay = () => {
         const minutes = Math.floor(timeRemaining / 60);
         const secs = timeRemaining % 60;
         document.getElementById('timer').textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
-        
+    };
+
+    updateDisplay();
+    timerInterval = setInterval(() => {
+        timeRemaining--;
+        updateDisplay();
         if (timeRemaining <= 0) {
             clearInterval(timerInterval);
             alert('Time is up! Submitting test...');
             submitTest(true);
         }
     }, 1000);
-    
-    const minutes = Math.floor(timeRemaining / 60);
-    const secs = timeRemaining % 60;
-    document.getElementById('timer').textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
-}
-
-async function saveProgress(silent = false) {
-    if (!submissionId) return false;
-    
-    for (const question of testData.questions) {
-        let answerData = {};
-        
-        switch(question.type) {
-            case 'multiple_choice':
-                const selected = document.querySelector(`input[name="answer-${question.id}"]:checked`);
-                if (selected) {
-                    answerData.answer_text = selected.value;
-                }
-                break;
-            case 'code':
-                if (codeEditors[question.id]) {
-                    answerData.code = codeEditors[question.id].getValue();
-                }
-                break;
-            case 'diagram':
-                const canvas = document.getElementById(`canvas-${question.id}`);
-                answerData.diagram_data = canvas.toDataURL();
-                break;
-            case 'text':
-                answerData.answer_text = document.getElementById(`text-${question.id}`).value;
-                break;
-        }
-        
-        if (Object.keys(answerData).length > 0) {
-            answerData.question_id = question.id;
-            
-            try {
-                const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(answerData)
-                });
-                if (res.status === 400) {
-                    const err = await res.json();
-                    if (err.auto_submitted) {
-                        alert('Time expired. Your test has been auto-submitted.');
-                        window.location.href = '/dashboard';
-                        return false;
-                    }
-                }
-            } catch (error) {
-                console.error('Error saving answer:', error);
-            }
-        }
-    }
-    
-    if (!silent) alert('Progress saved!');
-    return true;
 }
 
 async function submitTest(skipConfirm = false) {
-    if (!skipConfirm && !confirm('Are you sure you want to submit? You cannot modify answers after submission.')) {
+    const unanswered = testData.questions.filter((_, i) => !isQuestionAnswered(i)).length;
+    let message = 'Are you sure you want to submit? You cannot change your answers after submission.';
+    if (unanswered > 0) {
+        message = `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway?`;
+    }
+    if (!skipConfirm && !confirm(message)) {
         return;
     }
-    
-    // Save all answers first (silent)
-    await saveProgress(true);
-    
-    // Submit
+
+    const saved = await saveProgress(true);
+    if (!saved) return;
+
     try {
         const response = await fetch(`/api/v1/submissions/${submissionId}/submit`, {
             method: 'POST',
             credentials: 'include'
         });
-        
+
+        const data = response.headers.get('content-type')?.includes('json')
+            ? await response.json()
+            : null;
+
         if (response.ok) {
-            const data = await response.json();
-            if (data.auto_submitted) {
+            if (data?.auto_submitted || data?.already_submitted) {
                 alert('Time expired. Your test has been auto-submitted.');
             }
             if (timerInterval) clearInterval(timerInterval);
             window.location.href = '/dashboard';
         } else {
-            alert('Error submitting test. Please try again.');
+            if (data?.already_submitted || data?.auto_submitted) {
+                if (timerInterval) clearInterval(timerInterval);
+                window.location.href = '/dashboard';
+                return;
+            }
+            alert(data?.error || 'Error submitting test. Please try again.');
         }
     } catch (error) {
         console.error('Error submitting test:', error);
@@ -404,41 +832,61 @@ async function submitTest(skipConfirm = false) {
     }
 }
 
-// Canvas drawing functions
 let canvasContexts = {};
-let isDrawing = false;
+let canvasDrawing = {};
+
+function canvasPoint(canvas, e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+}
 
 function initCanvas(questionId) {
     const canvas = document.getElementById(`canvas-${questionId}`);
-    const ctx = canvas.getContext('2d');
-    canvasContexts[questionId] = ctx;
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    
-    canvas.addEventListener('mousedown', (e) => {
-        isDrawing = true;
-        const rect = canvas.getBoundingClientRect();
+    if (!canvas || canvas.dataset.initialized === '1') return;
+    canvas.dataset.initialized = '1';
+    canvasDrawing[questionId] = false;
+
+    const startDraw = (e) => {
+        canvasDrawing[questionId] = true;
+        const ctx = canvasContexts[questionId];
+        const point = canvasPoint(canvas, e);
         ctx.beginPath();
-        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-    });
-    
-    canvas.addEventListener('mousemove', (e) => {
-        if (!isDrawing) return;
-        const rect = canvas.getBoundingClientRect();
-        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.moveTo(point.x, point.y);
+    };
+
+    const draw = (e) => {
+        if (!canvasDrawing[questionId]) return;
+        const ctx = canvasContexts[questionId];
+        const point = canvasPoint(canvas, e);
+        ctx.lineTo(point.x, point.y);
         ctx.stroke();
-    });
-    
-    canvas.addEventListener('mouseup', () => {
-        isDrawing = false;
-    });
+    };
+
+    const stopDraw = () => {
+        if (canvasDrawing[questionId]) {
+            canvasDrawing[questionId] = false;
+            updateNavigation();
+            scheduleAutoSave();
+        }
+    };
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseleave', stopDraw);
 }
 
 function clearCanvas(questionId) {
     const canvas = document.getElementById(`canvas-${questionId}`);
     const ctx = canvasContexts[questionId];
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!canvas || !ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    updateNavigation();
+    scheduleAutoSave();
 }
 
 function loadCanvas(questionId, dataUrl) {
@@ -446,18 +894,36 @@ function loadCanvas(questionId, dataUrl) {
     img.onload = () => {
         const canvas = document.getElementById(`canvas-${questionId}`);
         const ctx = canvasContexts[questionId];
-        ctx.drawImage(img, 0, 0);
+        if (!canvas || !ctx) return;
+        ctx.clearRect(0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
+        const rect = canvas.getBoundingClientRect();
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        updateNavigation();
     };
     img.src = dataUrl;
 }
 
-document.getElementById('saveBtn').addEventListener('click', saveProgress);
-document.getElementById('submitBtn').addEventListener('click', submitTest);
+window.addEventListener('resize', () => {
+    if (!testData) return;
+    const question = testData.questions[currentQuestion];
+    if (getQuestionTypes(question).includes('diagram')) {
+        resizeCanvas(question.id);
+    }
+});
 
-// Auto-save every 30 seconds
+document.getElementById('prevBtn').addEventListener('click', goPrev);
+document.getElementById('nextBtn').addEventListener('click', goNext);
+document.getElementById('saveBtn').addEventListener('click', () => saveProgress(false));
+document.getElementById('submitBtn').addEventListener('click', () => submitTest(false));
+
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.closest('.CodeMirror')) return;
+    if (e.key === 'ArrowLeft') goPrev();
+    if (e.key === 'ArrowRight') goNext();
+});
+
 setInterval(() => saveProgress(true), 30000);
 
 loadTest();
 </script>
 {% endblock %}
-

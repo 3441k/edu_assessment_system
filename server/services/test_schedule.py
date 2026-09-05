@@ -33,6 +33,8 @@ def get_submission_deadline(test, submission, live_session=None):
     if _is_live_mode(test):
         if live_session and live_session.status == LIVE_SESSION_LIVE:
             return live_session.ends_at
+        if submission and submission.live_session:
+            return submission.live_session.ends_at
         return None
     deadlines = []
     if submission and submission.started_at and test.time_limit:

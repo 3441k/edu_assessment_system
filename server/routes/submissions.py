@@ -174,7 +174,11 @@ def save_answer(submission_id):
         return jsonify({"error": "Time expired. Test has been auto-submitted.", "auto_submitted": True}), 400
     
     if submission.status == SUBMISSION_STATUS_SUBMITTED:
-        return jsonify({"error": "Cannot modify submitted answers"}), 400
+        return jsonify({
+            "error": "Cannot modify submitted answers",
+            "already_submitted": True,
+            "auto_submitted": True,
+        }), 400
     
     data = request.get_json()
     question_id = data.get('question_id')
@@ -240,15 +244,21 @@ def submit_submission(submission_id):
 
     live_session = get_active_live_session(submission.test, db_session)
     if auto_submit_if_expired(submission, db_session, live_session):
+        db_session.refresh(submission)
         return jsonify({
             "id": submission.id,
             "status": submission.status,
             "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
             "auto_submitted": True
         }), 200
-    
+
     if submission.status == SUBMISSION_STATUS_SUBMITTED:
-        return jsonify({"error": "Submission already submitted"}), 400
+        return jsonify({
+            "id": submission.id,
+            "status": submission.status,
+            "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+            "already_submitted": True
+        }), 200
     
     submission.status = SUBMISSION_STATUS_SUBMITTED
     submission.submitted_at = datetime.utcnow()

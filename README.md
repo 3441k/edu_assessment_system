@@ -4,10 +4,13 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 
 ## Features
 
-- **Question Types**: Multiple choice, code writing, diagram drawing, and long text answers
+- **Question Types**: Multiple choice, code, diagram, and text — combinable on a single question (e.g. text + diagram, choices + code)
 - **Dual Student Interfaces**: Web-based (browser) and desktop application (PyQt5)
 - **Dual Lecturer Interfaces**: Web-based (browser) and desktop application (PyQt5)
+- **Student Test UX**: One question at a time with Previous/Next, numbered jump navigation, and auto-save
 - **Test Management**: Create tests from question bank, configure time limits, attempts, and availability
+- **Scheduled Tests**: Set availability windows and optional per-student duration; auto-submit when time expires
+- **Live Tests**: Lecturer-controlled sessions with Go Live, Extend, and End; global deadline and auto-submit for all students
 - **Auto & Manual Grading**: Automatic code execution with test cases, manual grading for all question types
 - **Statistics & Analytics**: Topic-wise performance tracking, student progress, class-wide statistics
 - **Export**: CSV grades export and PDF report generation
@@ -36,6 +39,8 @@ pip install -r requirements.txt
 ```bash
 python database/init_db.py
 ```
+
+Existing databases are migrated automatically on server startup (`database/migrate.py`).
 
 4. Start the Flask server:
 ```bash

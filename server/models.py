@@ -49,7 +49,8 @@ class Question(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     topic_id = Column(Integer, ForeignKey("topics.id"), nullable=False)
-    type = Column(String(50), nullable=False)  # multiple_choice, code, diagram, text
+    type = Column(String(50), nullable=False)  # primary label: single type or 'composite'
+    answer_types = Column(JSON, nullable=True)  # ordered list of answer components
     content = Column(Text, nullable=False)  # Question text/content
     correct_answer = Column(Text, nullable=True)  # JSON for multiple choice, expected output for code
     test_cases = Column(JSON, nullable=True)  # For code questions: [{"input": "...", "output": "..."}]

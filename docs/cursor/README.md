@@ -66,6 +66,12 @@ This folder contains comprehensive documentation about the Educational Assessmen
 **Using the student web interface**:
 → See `implementation_details.md` → Web Interface Routes → Student Web section
 
+**Test scheduling and live control**:
+→ See `implementation_details.md` → Test Scheduling and Live Control section
+
+**Composite questions and student test UI**:
+→ See `implementation_details.md` → Questions API and Student Web sections
+
 ## Notes
 
 - All documentation is in Markdown format for easy reading

@@ -1,8 +1,10 @@
 """Auto-grading service for code questions."""
 
+from typing import Optional
+
 from server.services.code_executor import grade_code_submission
 from server.models import Answer, Question, TestQuestion, Submission
-from typing import Optional
+from shared.question_utils import question_has_type
 
 
 def auto_grade_code_answer(answer: Answer, submission: Submission) -> Optional[float]:
@@ -22,7 +24,7 @@ def auto_grade_code_answer(answer: Answer, submission: Submission) -> Optional[f
     question = answer.question
     
     # Only auto-grade code questions
-    if question.type != 'code':
+    if not question_has_type(question, 'code'):
         return None
     
     # Get test cases

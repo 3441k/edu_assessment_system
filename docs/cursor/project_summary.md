@@ -85,13 +85,30 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 - [x] Student management (manual and CSV import)
 - [x] Export functionality (CSV, PDF)
 
+### Phase 5: Test Scheduling and Live Control
+- [x] Scheduled mode: availability windows, per-student time limits, auto-submit
+- [x] Live mode: lecturer Go Live / Extend / End, global deadline, locked/waiting student UI
+- [x] Live session API (`server/routes/live.py`)
+- [x] Schema migration for existing databases (`database/migrate.py`)
+- [x] Lecturer web UI for test mode and live controls
+- [x] Student web UI for availability status and shared live timer
+- [x] Desktop app support for scheduled availability fields (live controls web-only)
+
+### Phase 6: Composite Questions and UX Improvements
+- [x] Combined answer types per question (`answer_types` JSON, web question bank checkboxes)
+- [x] Student test-taking wizard UI (Previous/Next, numbered navigation, progress bar)
+- [x] Code editor and diagram canvas fixes on web test page
+- [x] Idempotent auto-submit on timeout; grading score validation and error messages
+- [x] Placeholder answer rows for unanswered questions during grading
+
 ## File Structure
 
 ```
 edu_assessment_system/
 ├── database/
 │   ├── assessment.db          # SQLite database
-│   └── init_db.py             # Database initialization
+│   ├── init_db.py             # Database initialization
+│   └── migrate.py             # Schema migrations for existing databases
 ├── server/
 │   ├── app.py                 # Flask application entry point
 │   ├── database.py            # Database engine and session
@@ -100,6 +117,7 @@ edu_assessment_system/
 │   │   ├── auth.py
 │   │   ├── questions.py
 │   │   ├── tests.py
+│   │   ├── live.py            # Live session control (Go Live / Extend / End)
 │   │   ├── submissions.py
 │   │   ├── grading.py
 │   │   ├── statistics.py
@@ -110,6 +128,8 @@ edu_assessment_system/
 │   ├── services/              # Business logic
 │   │   ├── code_executor.py   # Code execution with isolation
 │   │   ├── grader.py          # Auto-grading logic
+│   │   ├── test_schedule.py   # Availability windows and deadline logic
+│   │   ├── live_session.py    # Live session lifecycle and auto-submit
 │   │   └── report_generator.py
 │   ├── static/
 │   │   └── js/
@@ -144,6 +164,7 @@ edu_assessment_system/
 │       └── test_taking.py
 ├── shared/
 │   ├── constants.py            # Shared constants
+│   ├── question_utils.py       # Answer type helpers for composite questions
 │   └── api_client.py          # Base API client class
 ├── run_server.py              # Server startup script
 ├── run_lecturer.py            # Lecturer app startup script
@@ -159,9 +180,10 @@ edu_assessment_system/
 - **User**: Students and lecturers with role-based access
 - **Topic**: Organizes questions by subject/topic
 - **Question**: Stores question content, type, correct answer, test cases
-- **Test**: Collection of questions with time limits
+- **Test**: Collection of questions with time limits, availability, and test mode (`scheduled` or `live`)
+- **LiveSession**: Lecturer-started live window for a test (global deadline)
 - **TestQuestion**: Many-to-many relationship (test + question + order + points override)
-- **Submission**: Student's test attempt
+- **Submission**: Student's test attempt (optionally linked to a live session)
 - **Answer**: Individual question answer with score and feedback
 - **Grade**: Final grade for a submission
 
@@ -270,22 +292,23 @@ After database initialization:
 1. Login via web interface (`/lecturer/login`) or desktop app
 2. Manage Topics: Create topics to organize questions
 3. Question Bank: Add questions of different types
-4. Create Tests: Combine questions from question bank
-5. Student Management: Add students manually or import CSV
-6. Grading: Grade submitted tests (auto-grade code questions)
-7. Statistics: View analytics and export reports
+4. Create Tests: Combine questions; choose **Scheduled** (availability window + optional per-student duration) or **Live** (lecturer-controlled session)
+5. For live tests: use **Go Live**, **Extend**, and **End** on the web Tests tab
+6. Student Management: Add students manually or import CSV
+7. Grading: Grade submitted tests (auto-grade code questions)
+8. Statistics: View analytics and export reports
 
 ### For Students:
 1. Login via web interface or desktop app
-2. View available tests on dashboard
-3. Start test and answer questions
-4. Save progress (auto-saves every 30 seconds)
+2. View available tests on dashboard (status: open, upcoming, waiting, live, closed)
+3. Start test when available and answer questions
+4. Save progress (auto-saves every 30 seconds); auto-submit when deadline expires
 5. Submit test when complete
 6. View results and grades
 
 ## Future Enhancements (Not Implemented)
 
-- Real-time collaboration features
+- Live session controls in lecturer desktop app
 - Advanced diagram editing tools
 - Mobile app support
 - Integration with learning management systems

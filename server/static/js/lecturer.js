@@ -134,10 +134,13 @@ const LecturerUI = {
         const topicMap = Object.fromEntries(this.topics.map(t => [t.id, t.name]));
         const rows = this.questions.map(q => {
             const preview = q.content.length > 80 ? q.content.slice(0, 80) + '...' : q.content;
+            const typeLabel = (q.answer_types && q.answer_types.length > 1)
+                ? q.answer_types.map(t => t.replace('_', ' ')).join(' + ')
+                : (q.type_label || q.type);
             return `<tr>
                 <td>${q.id}</td>
                 <td>${this.escapeHtml(topicMap[q.topic_id] || '?')}</td>
-                <td><span class="badge bg-secondary">${q.type}</span></td>
+                <td><span class="badge bg-secondary">${this.escapeHtml(typeLabel)}</span></td>
                 <td class="question-content-preview" title="${this.escapeHtml(q.content)}">${this.escapeHtml(preview)}</td>
                 <td>${q.points}</td>
                 <td class="table-actions">
@@ -151,22 +154,38 @@ const LecturerUI = {
         );
     },
 
-    onQuestionTypeChange() {
-        const type = document.getElementById('questionType').value;
+    getSelectedAnswerTypes() {
+        return [...document.querySelectorAll('.answer-type-check:checked')].map(el => el.value);
+    },
+
+    setSelectedAnswerTypes(types) {
+        document.querySelectorAll('.answer-type-check').forEach(el => {
+            el.checked = types.includes(el.value);
+        });
+        this.onAnswerTypesChange();
+    },
+
+    onAnswerTypesChange() {
+        const types = this.getSelectedAnswerTypes();
         const fields = document.getElementById('questionTypeFields');
-        if (type === 'multiple_choice') {
-            fields.innerHTML = `
+        let html = '';
+        if (types.includes('multiple_choice')) {
+            html += `
                 <div class="mb-3"><label class="form-label">Choices (one per line)</label>
                 <textarea id="mcChoices" class="form-control" rows="4" placeholder="Option A\nOption B\nOption C"></textarea></div>
                 <div class="mb-3"><label class="form-label">Correct Answer</label>
                 <input type="text" id="mcCorrect" class="form-control"></div>`;
-        } else if (type === 'code') {
-            fields.innerHTML = `
+        }
+        if (types.includes('code')) {
+            html += `
                 <div class="mb-3"><label class="form-label">Test Cases (JSON)</label>
                 <textarea id="codeTestCases" class="form-control" rows="4" placeholder='[{"input":"5","output":"25"}]'></textarea></div>`;
-        } else {
-            fields.innerHTML = '';
         }
+        fields.innerHTML = html;
+    },
+
+    onQuestionTypeChange() {
+        this.onAnswerTypesChange();
     },
 
     async showQuestionModal(questionId) {
@@ -174,24 +193,24 @@ const LecturerUI = {
         document.getElementById('questionModalTitle').textContent = questionId ? 'Edit Question' : 'Add Question';
         document.getElementById('questionContent').value = '';
         document.getElementById('questionPoints').value = '1';
-        document.getElementById('questionType').value = 'multiple_choice';
-        this.onQuestionTypeChange();
+        this.setSelectedAnswerTypes(['multiple_choice']);
 
         if (questionId) {
             const q = this.questions.find(x => x.id === questionId) ||
                 await this.api('GET', `/api/v1/questions/${questionId}`);
             document.getElementById('questionTopic').value = q.topic_id;
-            document.getElementById('questionType').value = q.type;
-            this.onQuestionTypeChange();
+            const types = q.answer_types && q.answer_types.length ? q.answer_types : [q.type];
+            this.setSelectedAnswerTypes(types);
             document.getElementById('questionContent').value = q.content;
             document.getElementById('questionPoints').value = q.points;
-            if (q.type === 'multiple_choice' && q.correct_answer) {
+            if (types.includes('multiple_choice') && q.correct_answer) {
                 try {
                     const data = JSON.parse(q.correct_answer);
                     if (data.choices) document.getElementById('mcChoices').value = data.choices.join('\n');
                     if (data.correct) document.getElementById('mcCorrect').value = data.correct;
                 } catch { document.getElementById('mcCorrect').value = q.correct_answer; }
-            } else if (q.type === 'code' && q.test_cases) {
+            }
+            if (types.includes('code') && q.test_cases) {
                 document.getElementById('codeTestCases').value = JSON.stringify(q.test_cases, null, 2);
             }
         }
@@ -200,22 +219,25 @@ const LecturerUI = {
 
     async saveQuestion() {
         const id = document.getElementById('questionId').value;
-        const type = document.getElementById('questionType').value;
+        const answerTypes = this.getSelectedAnswerTypes();
+        if (!answerTypes.length) return alert('Select at least one answer type');
+
         const data = {
             topic_id: parseInt(document.getElementById('questionTopic').value),
-            type,
+            answer_types: answerTypes,
             content: document.getElementById('questionContent').value.trim(),
             points: parseFloat(document.getElementById('questionPoints').value)
         };
         if (!data.content) return alert('Content is required');
 
-        if (type === 'multiple_choice') {
+        if (answerTypes.includes('multiple_choice')) {
             const choices = document.getElementById('mcChoices').value.split('\n').map(c => c.trim()).filter(Boolean);
             const correct = document.getElementById('mcCorrect').value.trim();
-            if (!choices.length || !correct) return alert('Choices and correct answer required');
+            if (!choices.length || !correct) return alert('Choices and correct answer required for multiple choice');
             data.correct_answer = JSON.stringify({ choices, correct });
-        } else if (type === 'code') {
-            const tc = document.getElementById('codeTestCases').value.trim();
+        }
+        if (answerTypes.includes('code')) {
+            const tc = document.getElementById('codeTestCases')?.value.trim();
             if (tc) {
                 try { data.test_cases = JSON.parse(tc); }
                 catch { return alert('Invalid test cases JSON'); }

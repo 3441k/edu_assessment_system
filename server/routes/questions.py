@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify, session
 from server.database import db_session
 from server.models import Question, Topic
 from shared.constants import API_QUESTIONS, QUESTION_TYPES
-from datetime import datetime
+from shared.question_utils import get_answer_types, normalize_answer_types, format_type_label
 
 bp = Blueprint('questions', __name__, url_prefix=API_QUESTIONS)
 
@@ -14,36 +14,62 @@ def require_lecturer():
     user_id = session.get('user_id')
     if not user_id:
         return None, jsonify({"error": "Not authenticated"}), 401
-    
+
     from server.models import User
     user = db_session.query(User).filter_by(id=user_id).first()
     if not user or user.role != 'lecturer':
         return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-    
+
     return user, None, None
+
+
+def _serialize_question(question):
+    return {
+        "id": question.id,
+        "topic_id": question.topic_id,
+        "type": question.type,
+        "type_label": format_type_label(question),
+        "answer_types": get_answer_types(question),
+        "content": question.content,
+        "correct_answer": question.correct_answer,
+        "test_cases": question.test_cases,
+        "points": question.points,
+        "created_at": question.created_at.isoformat() if question.created_at else None,
+    }
+
+
+def _apply_question_types(question, data):
+    if 'answer_types' in data:
+        try:
+            answer_types, question_type = normalize_answer_types(
+                data.get('answer_types'),
+                data.get('type'),
+            )
+        except ValueError as exc:
+            return str(exc)
+        question.answer_types = answer_types
+        question.type = question_type
+    elif 'type' in data:
+        if data['type'] not in QUESTION_TYPES and data['type'] != 'composite':
+            return "Invalid question type"
+        if data['type'] == 'composite':
+            return "Use answer_types for composite questions"
+        question.type = data['type']
+        question.answer_types = [data['type']]
+    return None
 
 
 @bp.route('', methods=['GET'])
 def get_questions():
     """Get all questions, optionally filtered by topic."""
     topic_id = request.args.get('topic_id', type=int)
-    
+
     query = db_session.query(Question)
     if topic_id:
         query = query.filter_by(topic_id=topic_id)
-    
+
     questions = query.order_by(Question.created_at.desc()).all()
-    
-    return jsonify([{
-        "id": q.id,
-        "topic_id": q.topic_id,
-        "type": q.type,
-        "content": q.content,
-        "correct_answer": q.correct_answer,
-        "test_cases": q.test_cases,
-        "points": q.points,
-        "created_at": q.created_at.isoformat() if q.created_at else None
-    } for q in questions]), 200
+    return jsonify([_serialize_question(q) for q in questions]), 200
 
 
 @bp.route('/<int:question_id>', methods=['GET'])
@@ -52,17 +78,8 @@ def get_question(question_id):
     question = db_session.query(Question).filter_by(id=question_id).first()
     if not question:
         return jsonify({"error": "Question not found"}), 404
-    
-    return jsonify({
-        "id": question.id,
-        "topic_id": question.topic_id,
-        "type": question.type,
-        "content": question.content,
-        "correct_answer": question.correct_answer,
-        "test_cases": question.test_cases,
-        "points": question.points,
-        "created_at": question.created_at.isoformat() if question.created_at else None
-    }), 200
+
+    return jsonify(_serialize_question(question)), 200
 
 
 @bp.route('', methods=['POST'])
@@ -71,48 +88,46 @@ def create_question():
     user, error_response, status = require_lecturer()
     if error_response:
         return error_response, status
-    
+
     data = request.get_json()
     topic_id = data.get('topic_id')
-    question_type = data.get('type')
     content = data.get('content')
     correct_answer = data.get('correct_answer')
     test_cases = data.get('test_cases')
     points = data.get('points', 1.0)
-    
-    if not topic_id or not question_type or not content:
-        return jsonify({"error": "topic_id, type, and content are required"}), 400
-    
-    if question_type not in QUESTION_TYPES:
-        return jsonify({"error": f"Invalid question type. Must be one of: {QUESTION_TYPES}"}), 400
-    
-    # Verify topic exists
+
+    if not topic_id or not content:
+        return jsonify({"error": "topic_id and content are required"}), 400
+
+    if 'answer_types' not in data and not data.get('type'):
+        return jsonify({"error": "type or answer_types is required"}), 400
+
     topic = db_session.query(Topic).filter_by(id=topic_id).first()
     if not topic:
         return jsonify({"error": "Topic not found"}), 404
-    
+
+    try:
+        answer_types, question_type = normalize_answer_types(
+            data.get('answer_types'),
+            data.get('type'),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     question = Question(
         topic_id=topic_id,
         type=question_type,
+        answer_types=answer_types,
         content=content,
         correct_answer=correct_answer,
         test_cases=test_cases,
-        points=points
+        points=points,
     )
-    
+
     db_session.add(question)
     db_session.commit()
-    
-    return jsonify({
-        "id": question.id,
-        "topic_id": question.topic_id,
-        "type": question.type,
-        "content": question.content,
-        "correct_answer": question.correct_answer,
-        "test_cases": question.test_cases,
-        "points": question.points,
-        "created_at": question.created_at.isoformat() if question.created_at else None
-    }), 201
+
+    return jsonify(_serialize_question(question)), 201
 
 
 @bp.route('/<int:question_id>', methods=['PUT'])
@@ -121,21 +136,22 @@ def update_question(question_id):
     user, error_response, status = require_lecturer()
     if error_response:
         return error_response, status
-    
+
     question = db_session.query(Question).filter_by(id=question_id).first()
     if not question:
         return jsonify({"error": "Question not found"}), 404
-    
+
     data = request.get_json()
     if 'topic_id' in data:
         topic = db_session.query(Topic).filter_by(id=data['topic_id']).first()
         if not topic:
             return jsonify({"error": "Topic not found"}), 404
         question.topic_id = data['topic_id']
-    if 'type' in data:
-        if data['type'] not in QUESTION_TYPES:
-            return jsonify({"error": f"Invalid question type"}), 400
-        question.type = data['type']
+
+    type_error = _apply_question_types(question, data)
+    if type_error:
+        return jsonify({"error": type_error}), 400
+
     if 'content' in data:
         question.content = data['content']
     if 'correct_answer' in data:
@@ -144,19 +160,10 @@ def update_question(question_id):
         question.test_cases = data['test_cases']
     if 'points' in data:
         question.points = data['points']
-    
+
     db_session.commit()
-    
-    return jsonify({
-        "id": question.id,
-        "topic_id": question.topic_id,
-        "type": question.type,
-        "content": question.content,
-        "correct_answer": question.correct_answer,
-        "test_cases": question.test_cases,
-        "points": question.points,
-        "created_at": question.created_at.isoformat() if question.created_at else None
-    }), 200
+
+    return jsonify(_serialize_question(question)), 200
 
 
 @bp.route('/<int:question_id>', methods=['DELETE'])
@@ -165,13 +172,12 @@ def delete_question(question_id):
     user, error_response, status = require_lecturer()
     if error_response:
         return error_response, status
-    
+
     question = db_session.query(Question).filter_by(id=question_id).first()
     if not question:
         return jsonify({"error": "Question not found"}), 404
-    
+
     db_session.delete(question)
     db_session.commit()
-    
-    return jsonify({"message": "Question deleted successfully"}), 200
 
+    return jsonify({"message": "Question deleted successfully"}), 200

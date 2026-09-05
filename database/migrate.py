@@ -43,6 +43,9 @@ def run_migrations():
             "ALTER TABLE submissions ADD COLUMN live_session_id INTEGER REFERENCES live_sessions(id)"
         )
 
+    if _table_exists(cursor, "questions") and not _column_exists(cursor, "questions", "answer_types"):
+        cursor.execute("ALTER TABLE questions ADD COLUMN answer_types JSON")
+
     conn.commit()
     conn.close()
 
