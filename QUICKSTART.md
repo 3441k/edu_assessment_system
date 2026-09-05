@@ -104,7 +104,7 @@ Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`le
 3. **Create Tests**: Combine questions from the question bank into tests
 4. **Student Management**: Add students manually or import from CSV
 5. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize
-6. **Statistics**: View analytics and export reports
+6. **Statistics**: Open the **Statistics** tab for class overview charts, then drill down into tests or students (see below)
 
 When creating questions on the web **Question Bank** tab, check one or more **answer types** to combine components on a single question (e.g. written answer + diagram).
 
@@ -118,6 +118,21 @@ Each test uses one of two modes (set when creating or editing a test on the **Te
 | **Live** | Students see the test as locked until the lecturer starts a session. Use **Go Live** to set a global duration; all students share the same end time. **Extend** adds time; **End** closes the session early. In-progress submissions are auto-submitted when the session ends. |
 
 Live controls (Go Live / Extend / End) are available in the **lecturer web dashboard**. The desktop test editor supports scheduled availability fields; live session controls are web-only for now.
+
+#### Statistics (lecturer web)
+
+The **Statistics** tab provides a class overview first, then drill-down views:
+
+| View | What you see |
+|------|----------------|
+| **Class overview** | Summary cards, average score by test (bar chart), score distribution for a focused test, weak topics, quick test list |
+| **Browse tests** | Search by name; filter by mode (scheduled/live), grading status, and sort order; click a test for full test statistics |
+| **Test statistics** | Score distribution, per-question averages, student score table with **Grade** links |
+| **Browse students** | Search by username or student ID; click a student for their statistics |
+| **Student statistics** | Score trend across tests, per-test scores; click a test for per-question score summary |
+| **Student + test** | Total score and per-question breakdown (scores only); **Open grading** for full answers |
+
+Use the **Focus test** dropdown on the overview to change which test drives the distribution chart. Breadcrumb links at the top help navigate back. Grading stays on its own tab but is linked from statistics rows.
 
 ### For Students:
 

@@ -106,6 +106,15 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 - [x] Results page no longer depends on lecturer-only grading API
 - [x] Dashboard shows View Results for graded tests after scheduled windows close
 
+### Phase 8: Lecturer Web Statistics Redesign
+- [x] Class overview landing with Chart.js (test averages, score distribution, weak topics)
+- [x] Focus test picker on overview (mix of latest test + all-tests summary + selectable focus)
+- [x] Browse tests with search, mode/status filters, and sort
+- [x] Test drill-down: distribution charts, per-question averages, student score table
+- [x] Browse students with search
+- [x] Student drill-down: score trend, per-test list, per-question score summary
+- [x] One-click links to `/lecturer/grading/<submission_id>` from statistics views
+
 ## File Structure
 
 ```
@@ -301,7 +310,7 @@ After database initialization:
 5. For live tests: use **Go Live**, **Extend**, and **End** on the web Tests tab
 6. Student Management: Add students manually or import CSV
 7. Grading: Grade submitted tests (auto-grade code questions)
-8. Statistics: View analytics and export reports
+8. Statistics: Class overview charts, filter/search tests and students, drill down to test or student score summaries, open grading from statistics rows
 
 ### For Students:
 1. Login via web interface or desktop app

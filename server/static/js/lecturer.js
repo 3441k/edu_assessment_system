@@ -4,6 +4,15 @@ const LecturerUI = {
     questions: [],
     tests: [],
     allQuestions: [],
+    statsState: {
+        view: 'overview',
+        testId: null,
+        studentId: null,
+        focusTestId: null,
+        testFilters: { q: '', mode: '', status: 'all', sort: 'date' },
+        studentSearch: '',
+    },
+    _statsCharts: [],
 
     async api(method, endpoint, data) {
         const opts = { method, credentials: 'include', headers: {} };
@@ -454,41 +463,440 @@ const LecturerUI = {
     },
 
     // --- Statistics ---
-    async loadStatistics() {
-        const view = document.getElementById('statsView').value;
-        const el = document.getElementById('statisticsContent');
-        el.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+    destroyStatsCharts() {
+        this._statsCharts.forEach(c => c.destroy());
+        this._statsCharts = [];
+    },
 
+    statsNav(view, opts = {}) {
+        this.statsState.view = view;
+        if (opts.testId !== undefined) this.statsState.testId = opts.testId;
+        if (opts.studentId !== undefined) this.statsState.studentId = opts.studentId;
+        if (opts.focusTestId !== undefined) this.statsState.focusTestId = opts.focusTestId;
+        this.loadStatistics();
+    },
+
+    renderStatsBreadcrumb(items) {
+        const el = document.getElementById('statsBreadcrumb');
+        if (!items.length) { el.innerHTML = ''; return; }
+        el.innerHTML = items.map((item, i) => {
+            if (i === items.length - 1) return `<span>${this.escapeHtml(item.label)}</span>`;
+            return `<a href="#" onclick="LecturerUI.${item.action}; return false;">${this.escapeHtml(item.label)}</a> &rsaquo; `;
+        }).join('');
+    },
+
+    renderStatsToolbar(html) {
+        document.getElementById('statsToolbar').innerHTML = html || '';
+    },
+
+    scoreBarHtml(pct) {
+        const p = pct ?? 0;
+        const color = p >= 70 ? '#667eea' : p >= 50 ? '#f0ad4e' : '#dc3545';
+        return `<div class="stats-score-bar"><div class="stats-score-bar-fill" style="width:${Math.min(100, p)}%;background:${color}"></div></div>`;
+    },
+
+    pctBadge(pct) {
+        if (pct == null) return '<span class="badge bg-secondary">—</span>';
+        const cls = pct >= 70 ? 'bg-success' : pct >= 50 ? 'bg-warning text-dark' : 'bg-danger';
+        return `<span class="badge ${cls}">${pct}%</span>`;
+    },
+
+    mountChart(canvasId, config) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === 'undefined') return;
+        const chart = new Chart(canvas, config);
+        this._statsCharts.push(chart);
+    },
+
+    async loadStatistics() {
+        const el = document.getElementById('statisticsContent');
+        el.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+        this.destroyStatsCharts();
+
+        const { view } = this.statsState;
         try {
-            if (view === 'overview') {
-                const s = await this.api('GET', '/api/v1/statistics/overview');
-                el.innerHTML = `<div class="row">${[
-                    ['Students', s.total_students], ['Tests', s.total_tests],
-                    ['Questions', s.total_questions], ['Submissions', s.total_submissions],
-                    ['Graded', s.total_graded]
-                ].map(([label, val]) => `<div class="col-md-4 mb-3"><div class="card stat-card"><h3>${val}</h3><p class="text-muted mb-0">${label}</p></div></div>`).join('')}</div>`;
-            } else if (view === 'topics') {
-                const data = await this.api('GET', '/api/v1/statistics/topics');
-                el.innerHTML = this.tableHtml(['Topic', 'Questions', 'Avg Score', 'Submissions'],
-                    data.map(t => `<tr><td>${this.escapeHtml(t.topic_name)}</td><td>${t.question_count}</td><td>${t.average_score}</td><td>${t.submission_count}</td></tr>`));
-            } else if (view === 'students') {
-                const data = await this.api('GET', '/api/v1/statistics/students');
-                el.innerHTML = this.tableHtml(['Student', 'Tests Graded', 'Avg Percentage'],
-                    data.map(s => `<tr><td>${this.escapeHtml(s.username)}</td><td>${s.total_tests}</td><td>${s.average_percentage}%</td></tr>`));
-            } else if (view === 'tests') {
-                const tests = await this.api('GET', '/api/v1/tests');
-                if (!tests.length) { el.innerHTML = '<div class="alert alert-info">No tests.</div>'; return; }
-                let html = '<div class="list-group">';
-                for (const t of tests) {
-                    const stats = await this.api('GET', `/api/v1/statistics/tests/${t.id}`);
-                    html += `<div class="list-group-item"><strong>${this.escapeHtml(t.name)}</strong>
-                        &mdash; Submissions: ${stats.total_submissions ?? stats.submission_count ?? '-'}, Avg: ${stats.average_percentage ?? '-'}%</div>`;
-                }
-                html += '</div>';
-                el.innerHTML = html;
-            }
+            if (view === 'overview') await this.renderStatsOverview();
+            else if (view === 'tests') await this.renderStatsTestList();
+            else if (view === 'testDetail') await this.renderStatsTestDetail(this.statsState.testId);
+            else if (view === 'students') await this.renderStatsStudentList();
+            else if (view === 'studentDetail') await this.renderStatsStudentDetail(this.statsState.studentId);
+            else if (view === 'studentTestDetail') await this.renderStatsStudentTestDetail(this.statsState.studentId, this.statsState.testId);
+            else await this.renderStatsOverview();
         } catch (e) {
             el.innerHTML = `<div class="alert alert-danger">${this.escapeHtml(e.message)}</div>`;
+        }
+    },
+
+    async renderStatsOverview() {
+        const focusParam = this.statsState.focusTestId ? `?test_id=${this.statsState.focusTestId}` : '';
+        const data = await this.api('GET', `/api/v1/statistics/overview${focusParam}`);
+
+        this.renderStatsBreadcrumb([{ label: 'Class overview', action: "statsNav('overview')" }]);
+        this.renderStatsToolbar(`
+            <label class="form-label mb-0 small text-muted">Focus test</label>
+            <select class="form-select form-select-sm" style="width:auto;min-width:200px;" onchange="LecturerUI.statsState.focusTestId=parseInt(this.value)||null; LecturerUI.loadStatistics();">
+                <option value="">Latest with grades</option>
+                ${(data.tests_summary || []).map(t => `<option value="${t.test_id}" ${data.focus_test_id===t.test_id?'selected':''}>${this.escapeHtml(t.test_name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('tests')"><i class="fas fa-list me-1"></i>Browse tests</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('students')"><i class="fas fa-users me-1"></i>Browse students</button>
+        `);
+
+        const el = document.getElementById('statisticsContent');
+        const cards = [
+            ['Students', data.total_students, 'fa-users'],
+            ['Tests', data.total_tests, 'fa-file-alt'],
+            ['Submissions', data.total_submissions, 'fa-paper-plane'],
+            ['Graded', data.total_graded, 'fa-check-circle'],
+        ];
+
+        el.innerHTML = `
+            <div class="row mb-4">${cards.map(([label, val, icon]) => `
+                <div class="col-6 col-md-3 mb-3"><div class="card stat-card">
+                    <div class="text-muted mb-1"><i class="fas ${icon}"></i></div>
+                    <h3>${val}</h3><p class="text-muted mb-0 small">${label}</p>
+                </div></div>`).join('')}</div>
+
+            <div class="row mb-4">
+                <div class="col-lg-7 mb-3">
+                    <div class="card p-3 h-100">
+                        <h6 class="mb-3">Average score by test</h6>
+                        <div class="stats-chart-wrap"><canvas id="chartTestsAvg"></canvas></div>
+                    </div>
+                </div>
+                <div class="col-lg-5 mb-3">
+                    <div class="card p-3 h-100">
+                        <h6 class="mb-1">Score distribution${data.focus_test_name ? `: ${this.escapeHtml(data.focus_test_name)}` : ''}</h6>
+                        <p class="text-muted small mb-2">Graded submissions in selected test</p>
+                        <div class="stats-chart-wrap"><canvas id="chartDistribution"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-lg-6 mb-3">
+                    <div class="card p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Tests</h6>
+                            <button class="btn btn-link btn-sm p-0" onclick="LecturerUI.statsNav('tests')">View all</button>
+                        </div>
+                        ${this.tableHtml(['Test', 'Graded', 'Avg %', ''],
+                            (data.tests_summary || []).slice(0, 8).map(t => `<tr class="stats-clickable-row" onclick="LecturerUI.statsNav('testDetail',{testId:${t.test_id}})">
+                                <td><strong>${this.escapeHtml(t.test_name)}</strong><br><small class="text-muted">${t.test_mode} · ${t.question_count} Q</small></td>
+                                <td>${t.graded_submissions}/${t.total_submissions}</td>
+                                <td>${t.graded_submissions ? t.average_percentage + '%' : '—'}</td>
+                                <td><i class="fas fa-chevron-right text-muted"></i></td>
+                            </tr>`))}
+                    </div>
+                </div>
+                <div class="col-lg-6 mb-3">
+                    <div class="card p-3">
+                        <h6 class="mb-3">Weak topics <small class="text-muted">(lowest avg %)</small></h6>
+                        ${(data.weak_topics || []).length ? this.tableHtml(['Topic', 'Avg %', 'Answers'],
+                            data.weak_topics.map(t => `<tr>
+                                <td>${this.escapeHtml(t.topic_name)}</td>
+                                <td>${this.pctBadge(t.average_percentage)}</td>
+                                <td>${t.submission_count}</td>
+                            </tr>`)) : '<div class="alert alert-info mb-0">No graded answers yet.</div>'}
+                    </div>
+                </div>
+            </div>`;
+
+        const gradedTests = (data.tests_summary || []).filter(t => t.graded_submissions > 0);
+        if (gradedTests.length) {
+            this.mountChart('chartTestsAvg', {
+                type: 'bar',
+                data: {
+                    labels: gradedTests.map(t => t.test_name.length > 20 ? t.test_name.slice(0, 18) + '…' : t.test_name),
+                    datasets: [{ label: 'Avg %', data: gradedTests.map(t => t.average_percentage), backgroundColor: '#667eea' }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    onClick: (_, elems) => { if (elems[0]) this.statsNav('testDetail', { testId: gradedTests[elems[0].index].test_id }); },
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '%' } } },
+                },
+            });
+        }
+
+        const dist = data.focus_distribution || [];
+        if (dist.some(d => d.count > 0)) {
+            this.mountChart('chartDistribution', {
+                type: 'bar',
+                data: {
+                    labels: dist.map(d => d.label),
+                    datasets: [{ label: 'Students', data: dist.map(d => d.count), backgroundColor: '#764ba2' }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                },
+            });
+        } else {
+            document.querySelector('#chartDistribution')?.parentElement?.insertAdjacentHTML('beforeend',
+                '<p class="text-muted small text-center mb-0">No graded submissions for this test.</p>');
+        }
+    },
+
+    async renderStatsTestList() {
+        const f = this.statsState.testFilters;
+        const params = new URLSearchParams();
+        if (f.q) params.set('q', f.q);
+        if (f.mode) params.set('mode', f.mode);
+        if (f.status && f.status !== 'all') params.set('status', f.status);
+        if (f.sort) params.set('sort', f.sort);
+        const data = await this.api('GET', `/api/v1/statistics/tests?${params}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Tests', action: "statsNav('tests')" },
+        ]);
+        this.renderStatsToolbar(`
+            <input type="search" class="form-control form-control-sm" style="width:200px;" placeholder="Search tests…"
+                value="${this.escapeHtml(f.q)}" oninput="LecturerUI.statsState.testFilters.q=this.value; clearTimeout(LecturerUI._statsSearchTimer); LecturerUI._statsSearchTimer=setTimeout(()=>LecturerUI.loadStatistics(),300);">
+            <select class="form-select form-select-sm" onchange="LecturerUI.statsState.testFilters.mode=this.value; LecturerUI.loadStatistics();">
+                <option value="">All modes</option>
+                <option value="scheduled" ${f.mode==='scheduled'?'selected':''}>Scheduled</option>
+                <option value="live" ${f.mode==='live'?'selected':''}>Live</option>
+            </select>
+            <select class="form-select form-select-sm" onchange="LecturerUI.statsState.testFilters.status=this.value; LecturerUI.loadStatistics();">
+                <option value="all" ${f.status==='all'?'selected':''}>All tests</option>
+                <option value="has_submissions" ${f.status==='has_submissions'?'selected':''}>Has submissions</option>
+                <option value="graded" ${f.status==='graded'?'selected':''}>Has grades</option>
+                <option value="pending" ${f.status==='pending'?'selected':''}>Pending grading</option>
+            </select>
+            <select class="form-select form-select-sm" onchange="LecturerUI.statsState.testFilters.sort=this.value; LecturerUI.loadStatistics();">
+                <option value="date" ${f.sort==='date'?'selected':''}>Sort: newest</option>
+                <option value="name" ${f.sort==='name'?'selected':''}>Sort: name</option>
+                <option value="avg_score" ${f.sort==='avg_score'?'selected':''}>Sort: avg score</option>
+            </select>
+        `);
+
+        document.getElementById('statisticsContent').innerHTML = `
+            <div class="card p-3">
+                <h6 class="mb-3">${data.length} test${data.length !== 1 ? 's' : ''}</h6>
+                ${this.tableHtml(['Test', 'Mode', 'Submissions', 'Graded', 'Pending', 'Avg %', ''],
+                    data.map(t => `<tr class="stats-clickable-row" onclick="LecturerUI.statsNav('testDetail',{testId:${t.test_id}})">
+                        <td><strong>${this.escapeHtml(t.test_name)}</strong><br><small class="text-muted">${t.question_count} questions</small></td>
+                        <td><span class="badge bg-${t.test_mode==='live'?'danger':'secondary'}">${t.test_mode}</span></td>
+                        <td>${t.total_submissions}</td>
+                        <td>${t.graded_submissions}</td>
+                        <td>${t.pending_grade || '—'}</td>
+                        <td>${t.graded_submissions ? this.pctBadge(t.average_percentage) : '—'}</td>
+                        <td><i class="fas fa-chevron-right text-muted"></i></td>
+                    </tr>`))}
+            </div>`;
+    },
+
+    async renderStatsTestDetail(testId) {
+        if (!testId) { this.statsNav('tests'); return; }
+        const data = await this.api('GET', `/api/v1/statistics/tests/${testId}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Tests', action: "statsNav('tests')" },
+            { label: data.test_name, action: `statsNav('testDetail',{testId:${testId}})` },
+        ]);
+        this.renderStatsToolbar(`
+            <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.statsNav('tests')"><i class="fas fa-arrow-left me-1"></i>Back to tests</button>
+        `);
+
+        const el = document.getElementById('statisticsContent');
+        el.innerHTML = `
+            <div class="row mb-3">
+                <div class="col-md-3 mb-2"><div class="card stat-card p-3"><h3>${data.total_submissions}</h3><p class="text-muted mb-0 small">Submissions</p></div></div>
+                <div class="col-md-3 mb-2"><div class="card stat-card p-3"><h3>${data.graded_submissions}</h3><p class="text-muted mb-0 small">Graded</p></div></div>
+                <div class="col-md-3 mb-2"><div class="card stat-card p-3"><h3>${data.pending_grade || 0}</h3><p class="text-muted mb-0 small">Pending</p></div></div>
+                <div class="col-md-3 mb-2"><div class="card stat-card p-3"><h3>${data.graded_submissions ? data.average_percentage + '%' : '—'}</h3><p class="text-muted mb-0 small">Class average</p></div></div>
+            </div>
+            <div class="row mb-4">
+                <div class="col-lg-6 mb-3"><div class="card p-3"><h6 class="mb-3">Score distribution</h6><div class="stats-chart-wrap"><canvas id="chartTestDist"></canvas></div></div></div>
+                <div class="col-lg-6 mb-3"><div class="card p-3"><h6 class="mb-3">Average score per question</h6><div class="stats-chart-wrap"><canvas id="chartQuestionAvg"></canvas></div></div></div>
+            </div>
+            <div class="card p-3 mb-4">
+                <h6 class="mb-3">Question breakdown</h6>
+                ${this.tableHtml(['#', 'Question', 'Avg score', 'Avg %', 'Answers'],
+                    (data.question_statistics || []).map(q => `<tr>
+                        <td>Q${q.order}</td>
+                        <td class="question-content-preview" title="${this.escapeHtml(q.content)}">${this.escapeHtml(q.content)}</td>
+                        <td>${q.average_score} / ${q.max_points}</td>
+                        <td>${this.pctBadge(q.average_percentage)}</td>
+                        <td>${q.answer_count}</td>
+                    </tr>`))}
+            </div>
+            <div class="card p-3">
+                <h6 class="mb-3">Students</h6>
+                ${this.tableHtml(['Student', 'Status', 'Score', '%', 'Submitted', 'Actions'],
+                    (data.student_results || []).map(s => `<tr>
+                        <td><a href="#" onclick="LecturerUI.statsNav('studentDetail',{studentId:${s.student_id}}); return false;">${this.escapeHtml(s.username)}</a>
+                            ${s.student_id_number ? `<br><small class="text-muted">${this.escapeHtml(s.student_id_number)}</small>` : ''}</td>
+                        <td><span class="badge bg-${s.is_graded?'success':s.status==='submitted'?'warning text-dark':'secondary'}">${s.is_graded?'graded':s.status}</span></td>
+                        <td>${s.total_score != null ? `${s.total_score} / ${s.max_score}` : '—'}</td>
+                        <td>${this.pctBadge(s.percentage)}</td>
+                        <td><small>${s.submitted_at ? this.formatDatetime(s.submitted_at) : '—'}</small></td>
+                        <td>${s.submission_id ? `<a class="btn btn-sm btn-outline-primary" href="/lecturer/grading/${s.submission_id}">Grade</a>` : '—'}</td>
+                    </tr>`))}
+            </div>`;
+
+        const dist = data.score_distribution || [];
+        if (dist.some(d => d.count > 0)) {
+            this.mountChart('chartTestDist', {
+                type: 'bar',
+                data: { labels: dist.map(d => d.label), datasets: [{ data: dist.map(d => d.count), backgroundColor: '#667eea' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+            });
+        }
+
+        const qs = data.question_statistics || [];
+        if (qs.length) {
+            this.mountChart('chartQuestionAvg', {
+                type: 'bar',
+                data: {
+                    labels: qs.map(q => `Q${q.order}`),
+                    datasets: [{ label: 'Avg %', data: qs.map(q => q.average_percentage), backgroundColor: qs.map(q => q.average_percentage >= 70 ? '#667eea' : q.average_percentage >= 50 ? '#f0ad4e' : '#dc3545') }],
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } },
+            });
+        }
+    },
+
+    async renderStatsStudentList() {
+        const q = this.statsState.studentSearch;
+        const params = q ? `?q=${encodeURIComponent(q)}` : '';
+        const data = await this.api('GET', `/api/v1/statistics/students${params}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Students', action: "statsNav('students')" },
+        ]);
+        this.renderStatsToolbar(`
+            <input type="search" class="form-control form-control-sm" style="width:220px;" placeholder="Search name or ID…"
+                value="${this.escapeHtml(q)}" oninput="LecturerUI.statsState.studentSearch=this.value; clearTimeout(LecturerUI._statsStudentTimer); LecturerUI._statsStudentTimer=setTimeout(()=>LecturerUI.loadStatistics(),300);">
+        `);
+
+        document.getElementById('statisticsContent').innerHTML = `
+            <div class="card p-3">
+                <h6 class="mb-3">${data.length} student${data.length !== 1 ? 's' : ''}</h6>
+                ${this.tableHtml(['Student', 'Submissions', 'Graded', 'Avg %', ''],
+                    data.map(s => `<tr class="stats-clickable-row" onclick="LecturerUI.statsNav('studentDetail',{studentId:${s.student_id}})">
+                        <td><strong>${this.escapeHtml(s.username)}</strong>${s.student_id_number ? `<br><small class="text-muted">${this.escapeHtml(s.student_id_number)}</small>` : ''}</td>
+                        <td>${s.total_submissions}</td>
+                        <td>${s.total_tests_graded}</td>
+                        <td>${s.total_tests_graded ? this.pctBadge(s.average_percentage) : '—'}</td>
+                        <td><i class="fas fa-chevron-right text-muted"></i></td>
+                    </tr>`))}
+            </div>`;
+    },
+
+    async renderStatsStudentDetail(studentId) {
+        if (!studentId) { this.statsNav('students'); return; }
+        const data = await this.api('GET', `/api/v1/statistics/students/${studentId}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Students', action: "statsNav('students')" },
+            { label: data.username, action: `statsNav('studentDetail',{studentId:${studentId}})` },
+        ]);
+        this.renderStatsToolbar(`
+            <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.statsNav('students')"><i class="fas fa-arrow-left me-1"></i>Back to students</button>
+        `);
+
+        const el = document.getElementById('statisticsContent');
+        el.innerHTML = `
+            <div class="row mb-3">
+                <div class="col-md-4 mb-2"><div class="card stat-card p-3"><h3>${data.total_submissions}</h3><p class="text-muted mb-0 small">Submissions</p></div></div>
+                <div class="col-md-4 mb-2"><div class="card stat-card p-3"><h3>${data.total_graded}</h3><p class="text-muted mb-0 small">Graded</p></div></div>
+                <div class="col-md-4 mb-2"><div class="card stat-card p-3"><h3>${data.total_graded ? data.average_percentage + '%' : '—'}</h3><p class="text-muted mb-0 small">Average</p></div></div>
+            </div>
+            ${(data.test_chart || []).length ? `<div class="card p-3 mb-4"><h6 class="mb-3">Score trend across tests</h6><div class="stats-chart-wrap"><canvas id="chartStudentTrend"></canvas></div></div>` : ''}
+            <div class="card p-3">
+                <h6 class="mb-3">Tests</h6>
+                ${this.tableHtml(['Test', 'Status', 'Score', '%', 'Submitted', 'Actions'],
+                    (data.tests || []).map(t => `<tr class="stats-clickable-row" onclick="LecturerUI.statsNav('studentTestDetail',{studentId:${studentId},testId:${t.test_id}})">
+                        <td><strong>${this.escapeHtml(t.test_name)}</strong></td>
+                        <td><span class="badge bg-${t.is_graded?'success':t.status==='submitted'?'warning text-dark':'secondary'}">${t.is_graded?'graded':t.status}</span></td>
+                        <td>${t.total_score != null ? `${t.total_score} / ${t.max_score}` : '—'}</td>
+                        <td>${this.pctBadge(t.percentage)}</td>
+                        <td><small>${t.submitted_at ? this.formatDatetime(t.submitted_at) : '—'}</small></td>
+                        <td onclick="event.stopPropagation()">${t.submission_id ? `<a class="btn btn-sm btn-outline-primary" href="/lecturer/grading/${t.submission_id}">Grade</a>` : '—'}</td>
+                    </tr>`))}
+            </div>`;
+
+        const chart = data.test_chart || [];
+        if (chart.length) {
+            this.mountChart('chartStudentTrend', {
+                type: 'line',
+                data: {
+                    labels: chart.map(c => c.test_name.length > 18 ? c.test_name.slice(0, 16) + '…' : c.test_name),
+                    datasets: [{ label: 'Score %', data: chart.map(c => c.percentage), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', fill: true, tension: 0.3 }],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    onClick: (_, elems) => {
+                        if (elems[0]) {
+                            const t = data.tests.filter(x => x.percentage != null)[elems[0].index];
+                            if (t) this.statsNav('studentTestDetail', { studentId, testId: t.test_id });
+                        }
+                    },
+                    scales: { y: { beginAtZero: true, max: 100 } },
+                },
+            });
+        }
+    },
+
+    async renderStatsStudentTestDetail(studentId, testId) {
+        if (!studentId || !testId) { this.statsNav('studentDetail', { studentId }); return; }
+        const data = await this.api('GET', `/api/v1/statistics/students/${studentId}/tests/${testId}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Students', action: "statsNav('students')" },
+            { label: data.username, action: `statsNav('studentDetail',{studentId:${studentId}})` },
+            { label: data.test_name, action: `statsNav('studentTestDetail',{studentId:${studentId},testId:${testId}})` },
+        ]);
+        this.renderStatsToolbar(`
+            <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.statsNav('studentDetail',{studentId:${studentId}})"><i class="fas fa-arrow-left me-1"></i>Back to student</button>
+            <a class="btn btn-primary btn-sm" href="/lecturer/grading/${data.submission_id}"><i class="fas fa-edit me-1"></i>Open grading</a>
+            <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('testDetail',{testId:${testId}})"><i class="fas fa-chart-bar me-1"></i>Test statistics</button>
+        `);
+
+        document.getElementById('statisticsContent').innerHTML = `
+            <div class="card p-3 mb-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <h5 class="mb-1">${this.escapeHtml(data.username)} — ${this.escapeHtml(data.test_name)}</h5>
+                        <span class="badge bg-${data.percentage != null ? 'success' : 'secondary'}">${data.status}</span>
+                    </div>
+                    <div class="text-end">
+                        <div class="h4 mb-0">${data.total_score != null ? `${data.total_score} / ${data.max_score}` : 'Not graded'}</div>
+                        ${data.percentage != null ? this.pctBadge(data.percentage) : ''}
+                    </div>
+                </div>
+            </div>
+            <div class="card p-3 mb-4"><h6 class="mb-3">Score by question</h6><div class="stats-chart-wrap"><canvas id="chartStudentQuestions"></canvas></div></div>
+            <div class="card p-3">
+                <h6 class="mb-3">Question breakdown</h6>
+                ${this.tableHtml(['#', 'Question', 'Score', '%', 'Progress'],
+                    (data.questions || []).map(q => `<tr>
+                        <td>Q${q.order}</td>
+                        <td class="question-content-preview" title="${this.escapeHtml(q.content)}">${this.escapeHtml(q.content)}</td>
+                        <td>${q.score != null ? `${q.score} / ${q.max_points}` : '—'}</td>
+                        <td>${this.pctBadge(q.percentage)}</td>
+                        <td style="min-width:120px">${q.percentage != null ? this.scoreBarHtml(q.percentage) : '—'}</td>
+                    </tr>`))}
+            </div>`;
+
+        const qs = (data.questions || []).filter(q => q.percentage != null);
+        if (qs.length) {
+            this.mountChart('chartStudentQuestions', {
+                type: 'bar',
+                data: {
+                    labels: qs.map(q => `Q${q.order}`),
+                    datasets: [{ label: '% of max', data: qs.map(q => q.percentage), backgroundColor: qs.map(q => q.percentage >= 70 ? '#667eea' : q.percentage >= 50 ? '#f0ad4e' : '#dc3545') }],
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } },
+            });
         }
     },
 

@@ -64,9 +64,13 @@ Submission endpoints call `auto_submit_if_expired()` from `test_schedule.py` to 
 - `POST /submissions/<id>/finalize` - Finalize grading (lecturer only)
 
 ### Statistics (`/api/v1/statistics`)
-- `GET /overview` - Get overview statistics (lecturer only)
-- `GET /student/<id>` - Get student statistics (lecturer only)
-- `GET /test/<id>` - Get test statistics (lecturer only)
+- `GET /overview` - Class overview: totals, test summaries, focus-test distribution, weak topics. Query: `test_id` (optional focus test).
+- `GET /topics` - Per-topic averages and submission counts (lecturer only)
+- `GET /tests` - Test list with summary stats. Query: `q` (search), `mode` (`scheduled`|`live`), `status` (`all`|`has_submissions`|`graded`|`pending`), `sort` (`date`|`name`|`avg_score`)
+- `GET /tests/<id>` - Test detail: score distribution, question stats, student results with submission IDs (lecturer only)
+- `GET /students` - Student list with averages. Query: `q` (search username or student ID)
+- `GET /students/<id>` - Student detail: tests taken, grades, trend chart data (lecturer only)
+- `GET /students/<id>/tests/<test_id>` - Per-question score summary for one student on one test (lecturer only)
 
 ### Students (`/api/v1/students`)
 - `GET /` - Get all students (lecturer only)
@@ -111,7 +115,7 @@ The dashboard (`server/templates/lecturer/dashboard.html`) provides five tabs, e
 1. **Question Bank** — list/filter questions, manage topics, add/edit/delete questions with one or more answer types
 2. **Tests** — list tests, create/edit tests with question selection, set test mode (scheduled vs live), availability window, and time limit; for live tests, use Go Live / Extend / End controls
 3. **Grading** — list submitted/graded submissions, link to grading page
-4. **Statistics** — overview, by topic, by student, by test
+4. **Statistics** — class overview with Chart.js (test averages, score distribution, weak topics); browse tests/students with search and filters; drill-down to test statistics (question breakdown, student table) and student statistics (trend, per-test score summary); links to grading page
 5. **Students** — list students, add manually, import CSV, delete
 
 ### Role Separation

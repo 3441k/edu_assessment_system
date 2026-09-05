@@ -51,6 +51,17 @@
 - Student test wizard UI with Previous/Next and numbered navigation
 - Auto-submit and grading reliability fixes
 
+#### Phase 7: Student Results Access
+- Student submission API returns grades and per-question results
+- Results page and dashboard View Results for closed scheduled tests
+
+#### Phase 8: Lecturer Web Statistics Redesign
+- Class overview with Chart.js bar/line charts
+- Focus test picker, weak topics, all-tests summary on one screen
+- Searchable/filterable test and student browse lists
+- Drill-down: test statistics (distribution, question breakdown, student table) and student statistics (trend, per-test/per-question scores)
+- Heavy linking to grading page from statistics rows
+
 ## Critical Issues and Fixes
 
 ### Issue 1: Circular Import Error
@@ -190,6 +201,28 @@
 - Created `server/static/js/lecturer.js`
 - Updated `server/app.py`, `server/templates/login.html`, `README.md`, `QUICKSTART.md`
 
+## Feature: Lecturer Web Statistics Redesign
+
+**Date**: September 2026
+**Request**: Improve statistics UX — class overview with charts, search/filters for tests, drill-down into student and test statistics, links to grading
+
+**Implementation**:
+- Extended `server/routes/statistics.py` with overview enrichment, filtered test list, student/test drill-down endpoints
+- Rewrote Statistics tab in `server/static/js/lecturer.js` with breadcrumb navigation and Chart.js charts
+- Updated `server/templates/lecturer/dashboard.html` (Chart.js CDN, stats toolbar/breadcrumb)
+
+**Capabilities**:
+- Class overview: summary cards, average-by-test chart, focus-test distribution, weak topics
+- Browse tests: search, mode/status filters, sort; click through to test statistics
+- Browse students: search; click through to student statistics and per-test score summary
+- Grade links from student rows in statistics views
+
+**Files Changed**:
+- `server/routes/statistics.py`
+- `server/static/js/lecturer.js`
+- `server/templates/lecturer/dashboard.html`
+- `README.md`, `QUICKSTART.md`, `docs/cursor/*`
+
 ## UI/UX Improvements
 
 ### Login Window Redesign
@@ -246,6 +279,7 @@
 - [x] Auto-submit on timeout (idempotent submit endpoint)
 - [x] Grading score validation with clear error messages
 - [x] Student results viewing for graded scheduled and live tests
+- [x] Lecturer web statistics redesign (overview charts, filters, drill-down, grading links)
 
 ### Known Limitations
 - Code execution sandbox could be more secure

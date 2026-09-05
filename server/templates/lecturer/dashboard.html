@@ -11,6 +11,14 @@
     .stat-card { text-align: center; padding: 1.5rem; }
     .stat-card h3 { color: #667eea; margin-bottom: 0.25rem; }
     .question-content-preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stats-chart-wrap { position: relative; height: 260px; }
+    .stats-clickable-row { cursor: pointer; }
+    .stats-clickable-row:hover { background-color: rgba(102, 126, 234, 0.08); }
+    .stats-breadcrumb a { text-decoration: none; }
+    .stats-breadcrumb a:hover { text-decoration: underline; }
+    .stats-toolbar .form-select, .stats-toolbar .form-control { min-width: 140px; }
+    .stats-score-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+    .stats-score-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #667eea, #764ba2); }
 </style>
 {% endblock %}
 
@@ -59,14 +67,8 @@
 
     <!-- Statistics -->
     <div class="tab-pane fade" id="statisticsTab">
-        <div class="d-flex gap-2 mb-3">
-            <select id="statsView" class="form-select form-select-sm" style="width: auto;" onchange="LecturerUI.loadStatistics()">
-                <option value="overview">Overview</option>
-                <option value="topics">By Topic</option>
-                <option value="students">By Student</option>
-                <option value="tests">By Test</option>
-            </select>
-        </div>
+        <nav id="statsBreadcrumb" class="stats-breadcrumb mb-2 small text-muted"></nav>
+        <div id="statsToolbar" class="stats-toolbar d-flex flex-wrap gap-2 align-items-center mb-3"></div>
         <div id="statisticsContent"></div>
     </div>
 
@@ -281,6 +283,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/lecturer.js') }}"></script>
 <script>
 document.querySelector('.navbar a[href="/logout"]')?.setAttribute('href', '/lecturer/logout');
