@@ -6,6 +6,7 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 
 - **Question Types**: Multiple choice, code writing, diagram drawing, and long text answers
 - **Dual Student Interfaces**: Web-based (browser) and desktop application (PyQt5)
+- **Dual Lecturer Interfaces**: Web-based (browser) and desktop application (PyQt5)
 - **Test Management**: Create tests from question bank, configure time limits, attempts, and availability
 - **Auto & Manual Grading**: Automatic code execution with test cases, manual grading for all question types
 - **Statistics & Analytics**: Topic-wise performance tracking, student progress, class-wide statistics
@@ -13,7 +14,7 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 
 ## Architecture
 
-- **Lecturer Interface**: PyQt5 desktop application
+- **Lecturer Interfaces**: Web (Flask templates) and Desktop (PyQt5)
 - **Student Interfaces**: Web (Flask templates) and Desktop (PyQt5)
 - **Backend**: Flask REST API server
 - **Database**: SQLite
@@ -46,7 +47,10 @@ python database/init_db.py
 python -m server.app
 ```
 
-5. Run the lecturer application:
+5. Access lecturer web interface (recommended for browser use):
+Open browser and navigate to `http://localhost:5000/lecturer/login`
+
+6. Run the lecturer desktop application (optional):
 ```bash
 # Using the run script (recommended)
 ./run_lecturer.py
@@ -54,10 +58,10 @@ python -m server.app
 /home/hlnb/.pyenv/versions/3.12.0/bin/python3.12 run_lecturer.py
 ```
 
-6. Access student web interface:
-Open browser and navigate to `http://localhost:5000`
+7. Access student web interface:
+Open browser and navigate to `http://localhost:5000/login`
 
-7. Run student desktop application:
+8. Run student desktop application:
 ```bash
 # Using the run script (recommended)
 ./run_student.py
@@ -78,7 +82,10 @@ CODE_EXECUTION_MEMORY_LIMIT=128
 
 ## Default Credentials
 
-After initialization, create a lecturer account through the application or database.
+After initialization, a default lecturer account is created:
+- Username: `admin`
+- Password: `admin`
+- **Change this password after first login!**
 
 ## License
 

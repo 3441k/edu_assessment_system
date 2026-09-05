@@ -26,18 +26,21 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 
 - **Backend**: Flask REST API server (Python)
 - **Database**: SQLite with SQLAlchemy ORM
-- **Lecturer Interface**: PyQt5 desktop application
+- **Lecturer Interfaces**: 
+  - Web interface (Flask templates with Bootstrap)
+  - Desktop application (PyQt5)
 - **Student Interfaces**: 
   - Web interface (Flask templates with Bootstrap)
   - Desktop application (PyQt5) - optional
 
 ### Key Design Decisions
 
-1. **Dual Student Interfaces**: Students can use either web browser or desktop app, both connecting to the same backend
-2. **Local Network Deployment**: Designed for local network use in shared areas
-3. **Session-Based Authentication**: Flask sessions with bcrypt password hashing
-4. **Code Execution**: Isolated Python subprocess with resource limits for safe code evaluation
-5. **Question Storage**: Multiple choice questions store choices as JSON in `correct_answer` field: `{"choices": [...], "correct": "..."}`
+1. **Dual Lecturer Interfaces**: Lecturers can use either web browser or desktop app, both connecting to the same backend
+2. **Dual Student Interfaces**: Students can use either web browser or desktop app, both connecting to the same backend
+3. **Local Network Deployment**: Designed for local network use in shared areas
+4. **Session-Based Authentication**: Flask sessions with bcrypt password hashing
+5. **Code Execution**: Isolated Python subprocess with resource limits for safe code evaluation
+6. **Question Storage**: Multiple choice questions store choices as JSON in `correct_answer` field: `{"choices": [...], "correct": "..."}`
 
 ## Implementation Plan
 
@@ -56,6 +59,11 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
   - Grading (grade submissions)
   - Statistics (view analytics)
   - Student Management (add/import students)
+- [x] Web interface (Flask templates)
+  - Lecturer login page (`/lecturer/login`)
+  - Dashboard with tabs (question bank, tests, grading, statistics, students)
+  - Grading page for individual submissions (`/lecturer/grading/<id>`)
+  - JavaScript API client (`server/static/js/lecturer.js`)
 
 ### Phase 3: Student Interfaces
 - [x] Web interface (Flask templates)
@@ -97,17 +105,25 @@ edu_assessment_system/
 │   │   ├── statistics.py
 │   │   ├── students.py
 │   │   ├── topics.py
-│   │   └── web.py             # Web interface routes
+│   │   ├── web.py             # Student web interface routes
+│   │   └── lecturer_web.py    # Lecturer web interface routes
 │   ├── services/              # Business logic
 │   │   ├── code_executor.py   # Code execution with isolation
 │   │   ├── grader.py          # Auto-grading logic
 │   │   └── report_generator.py
+│   ├── static/
+│   │   └── js/
+│   │       └── lecturer.js    # Lecturer web dashboard logic
 │   └── templates/             # HTML templates
 │       ├── base.html
 │       ├── login.html
 │       ├── dashboard.html
 │       ├── test_taking.html
-│       └── results.html
+│       ├── results.html
+│       └── lecturer/
+│           ├── login.html
+│           ├── dashboard.html
+│           └── grading.html
 ├── lecturer_app/
 │   ├── main.py                # Entry point
 │   ├── api_client.py          # API client for lecturer app
@@ -251,7 +267,7 @@ After database initialization:
 ## Usage Workflow
 
 ### For Lecturers:
-1. Login to lecturer desktop app
+1. Login via web interface (`/lecturer/login`) or desktop app
 2. Manage Topics: Create topics to organize questions
 3. Question Bank: Add questions of different types
 4. Create Tests: Combine questions from question bank

@@ -75,10 +75,11 @@
 **Root Cause**: Default admin user is lecturer, but web login redirected all users to student dashboard, which then redirected lecturers back to login
 **Solution**:
 - Modified `server/routes/web.py` to check role and show error for lecturers
-- Updated `server/templates/login.html` JavaScript to check role and prevent lecturer login via web
+- Updated `server/templates/login.html` JavaScript to check role and redirect lecturers to `/lecturer/login`
 **Files Changed**:
 - `server/routes/web.py`
 - `server/templates/login.html`
+**Note**: Later superseded by dedicated lecturer web interface at `/lecturer/login` (see Feature: Lecturer Web Interface below).
 
 ### Issue 5: Session Not Persisting (Web)
 **Date**: Mid development
@@ -147,6 +148,36 @@
 **Files Changed**:
 - `server/routes/statistics.py`
 
+## Feature: Lecturer Web Interface
+
+**Date**: September 2026
+**Request**: Add web-based lecturer control alongside the existing PyQt5 desktop app
+
+**Implementation**:
+- Created `server/routes/lecturer_web.py` with routes under `/lecturer`
+- Added templates in `server/templates/lecturer/` (login, dashboard, grading)
+- Added `server/static/js/lecturer.js` for API-driven dashboard UI
+- Registered blueprint in `server/app.py`
+- Updated student login page with link to lecturer login
+
+**Capabilities** (parity with desktop app):
+- Question bank management (topics, CRUD for all question types)
+- Test creation and editing
+- Submission grading with score/feedback and finalize
+- Statistics (overview, by topic, by student, by test)
+- Student management (add, delete, CSV import)
+
+**Design**:
+- Both lecturer interfaces (web and desktop) use the same REST API
+- Server-side `require_lecturer()` guards on API endpoints unchanged
+- Web pages use Flask session cookies via `fetch(..., { credentials: 'include' })`
+
+**Files Added/Changed**:
+- Created `server/routes/lecturer_web.py`
+- Created `server/templates/lecturer/login.html`, `dashboard.html`, `grading.html`
+- Created `server/static/js/lecturer.js`
+- Updated `server/app.py`, `server/templates/login.html`, `README.md`, `QUICKSTART.md`
+
 ## UI/UX Improvements
 
 ### Login Window Redesign
@@ -185,7 +216,7 @@
 ## Testing and Validation
 
 ### Manual Testing Performed
-- [x] Lecturer login and logout
+- [x] Lecturer login and logout (web and desktop)
 - [x] Student login (web and desktop)
 - [x] Question creation (all types)
 - [x] Test creation
@@ -195,6 +226,8 @@
 - [x] Statistics viewing
 - [x] Topic management
 - [x] Student management
+- [x] Lecturer web dashboard (all tabs)
+- [x] Lecturer web grading workflow
 
 ### Known Limitations
 - Code execution sandbox could be more secure
@@ -209,7 +242,8 @@
 - Add more validation
 - Improve error messages
 - Add loading indicators
-- Better mobile responsiveness for web interface
+- Better mobile responsiveness for web interfaces
+- PDF/CSV export from lecturer web statistics tab
 
 ### Medium Term
 - Automated test suite

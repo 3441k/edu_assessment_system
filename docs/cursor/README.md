@@ -60,6 +60,12 @@ This folder contains comprehensive documentation about the Educational Assessmen
 **Understanding question formats**:
 → See `implementation_details.md` → Question Type Formats section
 
+**Using the lecturer web interface**:
+→ See `implementation_details.md` → Web Interface Routes → Lecturer Web section
+
+**Using the student web interface**:
+→ See `implementation_details.md` → Web Interface Routes → Student Web section
+
 ## Notes
 
 - All documentation is in Markdown format for easy reading

@@ -2,6 +2,8 @@
 
 ## API Endpoints
 
+All lecturer web and desktop interfaces consume the same REST API. Web pages use JavaScript `fetch()` with session cookies; desktop apps use `requests.Session()`.
+
 ### Authentication (`/api/v1/auth`)
 - `POST /login` - Login with username and password
 - `POST /logout` - Logout current user
@@ -52,6 +54,47 @@
 - `POST /import` - Import students from CSV (lecturer only)
 - `PUT /<id>` - Update student (lecturer only)
 - `DELETE /<id>` - Delete student (lecturer only)
+
+## Web Interface Routes
+
+### Student Web (`/`)
+
+| Route | Description |
+|-------|-------------|
+| `GET /login` | Student login page |
+| `GET /logout` | Logout and redirect to student login |
+| `GET /dashboard` | Student test dashboard (student role required) |
+| `GET /test/<test_id>` | Test taking page (student role required) |
+| `GET /results/<submission_id>` | View graded results (student role required) |
+
+Implemented in `server/routes/web.py`. Uses `require_student()` to block lecturers.
+
+### Lecturer Web (`/lecturer`)
+
+| Route | Description |
+|-------|-------------|
+| `GET /lecturer/login` | Lecturer login page |
+| `GET /lecturer/logout` | Logout and redirect to lecturer login |
+| `GET /lecturer/dashboard` | Main control panel with tabs (lecturer role required) |
+| `GET /lecturer/grading/<submission_id>` | Grade a specific submission (lecturer role required) |
+
+Implemented in `server/routes/lecturer_web.py`. Uses `require_lecturer()` for protected pages.
+
+### Lecturer Dashboard Tabs
+
+The dashboard (`server/templates/lecturer/dashboard.html`) provides five tabs, each calling the REST API via `server/static/js/lecturer.js`:
+
+1. **Question Bank** — list/filter questions, manage topics, add/edit/delete questions
+2. **Tests** — list tests, create/edit tests with question selection
+3. **Grading** — list submitted/graded submissions, link to grading page
+4. **Statistics** — overview, by topic, by student, by test
+5. **Students** — list students, add manually, import CSV, delete
+
+### Role Separation
+
+- Student login (`/login`) rejects users with `role=lecturer` and links to `/lecturer/login`
+- Lecturer login (`/lecturer/login`) rejects users with `role=student` and links to `/login`
+- Both share the same `/api/v1/auth/login` endpoint; role is checked client-side and in route guards
 
 ## Database Schema
 
@@ -323,7 +366,8 @@ app.config['SESSION_COOKIE_NAME'] = 'assessment_session'
 - Statistics calculation
 
 ### Manual Testing Checklist
-- [ ] Login/logout for both roles
+- [ ] Login/logout for both roles (web and desktop)
+- [ ] Lecturer web dashboard (all tabs)
 - [ ] Create and edit questions
 - [ ] Create tests
 - [ ] Take test (web and desktop)
@@ -337,8 +381,9 @@ app.config['SESSION_COOKIE_NAME'] = 'assessment_session'
 ### Local Network Setup
 1. Ensure Flask server is accessible on network interface (0.0.0.0)
 2. Configure firewall to allow port 5000
-3. Students access via `http://<server-ip>:5000`
-4. Desktop apps configured with server URL
+3. Students access via `http://<server-ip>:5000/login`
+4. Lecturers access via `http://<server-ip>:5000/lecturer/login`
+5. Desktop apps configured with server URL
 
 ### Database Backup
 - SQLite database is single file: `database/assessment.db`

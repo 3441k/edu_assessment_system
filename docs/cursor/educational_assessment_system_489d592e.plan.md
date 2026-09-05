@@ -82,6 +82,7 @@ todos:
 The system will use a **client-server architecture**:
 
 - **Lecturer Interface**: PyQt5 desktop application for test creation, grading, and analytics
+- **Lecturer Web Interface**: Flask templates with Bootstrap for browser-based management
 - **Student Interfaces**: 
   - Web-based interface (Flask templates) accessible via browser
   - Desktop application (PyQt5) for students who prefer native app
@@ -110,14 +111,19 @@ Both student interfaces connect to the same API, providing flexibility for diffe
 ```mermaid
 graph TB
     Lecturer[Lecturer Desktop App<br/>PyQt5] -->|HTTP API| Server[Flask Server<br/>REST API]
+    LecturerWeb[Lecturer Web Interface<br/>Browser] -->|HTTP API| Server
     StudentWeb[Student Web Interface<br/>Browser] -->|HTTP API| Server
     StudentDesktop[Student Desktop App<br/>PyQt5] -->|HTTP API| Server
     Server -->|Read/Write| DB[(SQLite Database)]
     Server -->|Execute| Sandbox[Code Sandbox<br/>Subprocess]
     Lecturer -->|Manage| Topics[Topics & Questions]
+    LecturerWeb -->|Manage| Topics
     Lecturer -->|Create| Tests[Tests & Assignments]
+    LecturerWeb -->|Create| Tests
     Lecturer -->|Grade| Submissions[Student Submissions]
+    LecturerWeb -->|Grade| Submissions
     Lecturer -->|View| Stats[Statistics & Reports]
+    LecturerWeb -->|View| Stats
 ```
 
 
@@ -189,17 +195,26 @@ EU/
 │   │   ├── questions.py     # Question management
 │   │   ├── submissions.py   # Submission handling
 │   │   ├── grading.py       # Grading endpoints
-│   │   └── statistics.py    # Analytics endpoints
+│   │   ├── statistics.py    # Analytics endpoints
+│   │   ├── lecturer_web.py  # Lecturer web interface routes
+│   │   └── web.py           # Student web interface routes
+│   ├── static/
+│   │   └── js/
+│   │       └── lecturer.js  # Lecturer web dashboard logic
 │   ├── services/
 │   │   ├── code_executor.py # Safe code execution
 │   │   ├── grader.py        # Auto-grading logic
 │   │   └── report_generator.py
-│   └── templates/           # Student web interface
+│   └── templates/           # Web interfaces
 │       ├── login.html
 │       ├── dashboard.html
 │       ├── test_taking.html
 │       ├── drawing_canvas.html
-│       └── results.html
+│       ├── results.html
+│       └── lecturer/
+│           ├── login.html
+│           ├── dashboard.html
+│           └── grading.html
 ├── shared/                   # Shared code between apps
 │   ├── api_client.py        # Common API client base class
 │   └── constants.py         # Shared constants and config

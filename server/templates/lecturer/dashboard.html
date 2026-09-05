@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Lecturer Dashboard - Assessment System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-tabs .nav-link { color: #667eea; }
+    .nav-tabs .nav-link.active { font-weight: 600; }
+    .tab-pane { padding-top: 1rem; }
+    .table-actions .btn { margin-right: 0.25rem; }
+    .stat-card { text-align: center; padding: 1.5rem; }
+    .stat-card h3 { color: #667eea; margin-bottom: 0.25rem; }
+    .question-content-preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-chalkboard-teacher me-2"></i>Lecturer Dashboard</h2>
+</div>
+
+<ul class="nav nav-tabs" id="lecturerTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#questionsTab">Question Bank</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#testsTab">Tests</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#gradingTab">Grading</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statisticsTab">Statistics</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#studentsTab">Students</button></li>
+</ul>
+
+<div class="tab-content" id="lecturerTabContent">
+    <!-- Question Bank -->
+    <div class="tab-pane fade show active" id="questionsTab">
+        <div class="d-flex justify-content-between mb-3">
+            <div class="d-flex gap-2 align-items-center">
+                <label class="form-label mb-0">Topic:</label>
+                <select id="topicFilter" class="form-select form-select-sm" style="width: auto;"></select>
+                <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.showTopicsModal()">Manage Topics</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="LecturerUI.showQuestionModal()">Add Question</button>
+        </div>
+        <div id="questionsTable"></div>
+    </div>
+
+    <!-- Tests -->
+    <div class="tab-pane fade" id="testsTab">
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-primary btn-sm" onclick="LecturerUI.showTestModal()">Create Test</button>
+        </div>
+        <div id="testsTable"></div>
+    </div>
+
+    <!-- Grading -->
+    <div class="tab-pane fade" id="gradingTab">
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.loadGrading()">Refresh</button>
+        </div>
+        <div id="gradingTable"></div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="tab-pane fade" id="statisticsTab">
+        <div class="d-flex gap-2 mb-3">
+            <select id="statsView" class="form-select form-select-sm" style="width: auto;" onchange="LecturerUI.loadStatistics()">
+                <option value="overview">Overview</option>
+                <option value="topics">By Topic</option>
+                <option value="students">By Student</option>
+                <option value="tests">By Test</option>
+            </select>
+        </div>
+        <div id="statisticsContent"></div>
+    </div>
+
+    <!-- Students -->
+    <div class="tab-pane fade" id="studentsTab">
+        <div class="d-flex justify-content-end gap-2 mb-3">
+            <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('csvImport').click()">Import CSV</button>
+            <input type="file" id="csvImport" accept=".csv" style="display:none" onchange="LecturerUI.importStudents(this)">
+            <button class="btn btn-primary btn-sm" onclick="LecturerUI.showStudentModal()">Add Student</button>
+        </div>
+        <div id="studentsTable"></div>
+    </div>
+</div>
+
+<!-- Question Modal -->
+<div class="modal fade" id="questionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="questionModalTitle">Add Question</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="questionId">
+                <div class="mb-3">
+                    <label class="form-label">Topic</label>
+                    <select id="questionTopic" class="form-select"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Type</label>
+                    <select id="questionType" class="form-select" onchange="LecturerUI.onQuestionTypeChange()">
+                        <option value="multiple_choice">Multiple Choice</option>
+                        <option value="code">Code</option>
+                        <option value="diagram">Diagram</option>
+                        <option value="text">Text</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Content</label>
+                    <textarea id="questionContent" class="form-control" rows="3"></textarea>
+                </div>
+                <div id="questionTypeFields"></div>
+                <div class="mb-3">
+                    <label class="form-label">Points</label>
+                    <input type="number" id="questionPoints" class="form-control" value="1" min="0.1" step="0.1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="LecturerUI.saveQuestion()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Topics Modal -->
+<div class="modal fade" id="topicsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Manage Topics</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group mb-3">
+                    <input type="text" id="newTopicName" class="form-control" placeholder="Topic name">
+                    <button class="btn btn-primary" onclick="LecturerUI.addTopic()">Add</button>
+                </div>
+                <div id="topicsList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Modal -->
+<div class="modal fade" id="testModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="testModalTitle">Create Test</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="testId">
+                <div class="mb-3">
+                    <label class="form-label">Test Name</label>
+                    <input type="text" id="testName" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea id="testDescription" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Time Limit (minutes, 0 = no limit)</label>
+                        <input type="number" id="testTimeLimit" class="form-control" value="0" min="0">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Attempts Allowed</label>
+                        <input type="number" id="testAttempts" class="form-control" value="1" min="1">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Select Questions (check to include, order matters)</label>
+                    <div id="testQuestionsList" style="max-height: 250px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="LecturerUI.saveTest()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Student Modal -->
+<div class="modal fade" id="studentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Student</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="studentUsername" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="studentPassword" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Student ID (optional)</label>
+                    <input type="text" id="studentIdField" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="LecturerUI.saveStudent()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/lecturer.js') }}"></script>
+<script>
+document.querySelector('.navbar a[href="/logout"]')?.setAttribute('href', '/lecturer/logout');
+document.addEventListener('DOMContentLoaded', () => LecturerUI.init());
+</script>
+{% endblock %}

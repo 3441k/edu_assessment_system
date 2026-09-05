@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Login - Assessment System{% endblock %}
+{% block title %}Lecturer Login - Assessment System{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,36 +8,31 @@
         <div class="card">
             <div class="card-body p-5">
                 <h2 class="card-title text-center mb-4">
-                    <i class="fas fa-sign-in-alt me-2"></i>Student Login
+                    <i class="fas fa-chalkboard-teacher me-2"></i>Lecturer Login
                 </h2>
-                
+
                 <form id="loginForm">
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
                         <input type="text" class="form-control" id="username" name="username" required>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="student_id" class="form-label">Student ID</label>
-                        <input type="text" class="form-control" id="student_id" name="student_id">
-                    </div>
-                    
+
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
-                    
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="fas fa-sign-in-alt me-2"></i>Login
                         </button>
                     </div>
-                    
+
                     <div id="errorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
                 </form>
 
                 <div class="text-center mt-4">
-                    <a href="/lecturer/login" class="text-muted">Lecturer login</a>
+                    <a href="/login" class="text-muted">Student login</a>
                 </div>
             </div>
         </div>
@@ -47,37 +42,28 @@
 <script>
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
+
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    const studentId = document.getElementById('student_id').value;
-    
     const errorDiv = document.getElementById('errorMessage');
     errorDiv.style.display = 'none';
-    
+
     try {
         const response = await fetch('/api/v1/auth/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ username, password, student_id: studentId }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
             credentials: 'include'
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
-            // Check if user is a student before redirecting
-            if (data.user && data.user.role === 'student') {
-                // Small delay to ensure session cookie is set
-                setTimeout(() => {
-                    window.location.href = '/dashboard';
-                }, 100);
+            if (data.user && data.user.role === 'lecturer') {
+                setTimeout(() => { window.location.href = '/lecturer/dashboard'; }, 100);
             } else {
-                errorDiv.textContent = 'This login page is for students only. Please use the lecturer login page.';
+                errorDiv.textContent = 'This login page is for lecturers only.';
                 errorDiv.style.display = 'block';
-                // Clear any session
                 fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
             }
         } else {
@@ -91,4 +77,3 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
 });
 </script>
 {% endblock %}
-

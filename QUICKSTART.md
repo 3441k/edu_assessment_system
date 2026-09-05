@@ -35,7 +35,23 @@ python server/app.py
 
 The server will start on `http://0.0.0.0:5000` (accessible from all network interfaces).
 
-### 2. Run Lecturer Application
+### 2. Access Lecturer Interface
+
+**Option A — Web (browser):**
+
+Open a web browser and navigate to:
+```
+http://localhost:5000/lecturer/login
+```
+
+Or from another device on the local network:
+```
+http://<server-ip>:5000/lecturer/login
+```
+
+Login with the default credentials (admin/admin) or your lecturer account.
+
+**Option B — Desktop app (optional):**
 
 In a new terminal:
 
@@ -43,7 +59,7 @@ In a new terminal:
 python lecturer_app/main.py
 ```
 
-Login with the default credentials (admin/admin) or your lecturer account.
+Login with the same credentials.
 
 ### 3. Access Student Web Interface
 
@@ -81,6 +97,8 @@ CODE_EXECUTION_MEMORY_LIMIT=128
 
 ### For Lecturers:
 
+Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`lecturer_app/main.py`). Both connect to the same API and offer the same capabilities:
+
 1. **Manage Topics**: Create topics to organize questions
 2. **Question Bank**: Add questions of different types (multiple choice, code, diagram, text)
 3. **Create Tests**: Combine questions from the question bank into tests
@@ -111,7 +129,7 @@ student2,password456,STU002
 
 ## Troubleshooting
 
-- **Connection errors**: Ensure the Flask server is running before starting desktop applications
+- **Connection errors**: Ensure the Flask server is running before starting desktop applications or using web interfaces
 - **Database errors**: Run `python database/init_db.py` to reinitialize
 - **Port already in use**: Change `SERVER_PORT` in `.env` file
 - **Import errors**: Ensure all dependencies are installed: `pip install -r requirements.txt`
