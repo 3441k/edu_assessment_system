@@ -14,3 +14,10 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "database/assessment.db")
 engine = create_engine(f"sqlite:///{DATABASE_PATH}", echo=False)
 db_session = scoped_session(sessionmaker(bind=engine))
 
+# Apply migrations for existing databases
+try:
+    from database.migrate import run_migrations
+    run_migrations()
+except Exception:
+    pass
+

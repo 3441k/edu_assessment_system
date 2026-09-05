@@ -3,10 +3,48 @@
 from flask import Blueprint, request, jsonify, session
 from server.database import db_session
 from server.models import Submission, Answer, Test, Question, TestQuestion
-from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_NOT_STARTED, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED
+from server.services.test_schedule import (
+    auto_submit_if_expired, can_start_test, submission_timing_info
+)
+from server.services.live_session import get_active_live_session
+from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, TEST_MODE_LIVE
 from datetime import datetime
 
 bp = Blueprint('submissions', __name__, url_prefix=API_SUBMISSIONS)
+
+
+def _submission_response(submission, include_answers=False):
+    """Build submission JSON with timing info."""
+    live_session = get_active_live_session(submission.test, db_session)
+    auto_submit_if_expired(submission, db_session, live_session)
+    db_session.refresh(submission)
+
+    data = {
+        "id": submission.id,
+        "test_id": submission.test_id,
+        "test_name": submission.test.name if submission.test else None,
+        "user_id": submission.user_id,
+        "username": submission.user.username if submission.user else None,
+        "started_at": submission.started_at.isoformat() if submission.started_at else None,
+        "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+        "status": submission.status,
+        "live_session_id": submission.live_session_id,
+    }
+    data.update(submission_timing_info(submission.test, submission, live_session))
+
+    if include_answers:
+        answers = db_session.query(Answer).filter_by(submission_id=submission.id).all()
+        data["answers"] = [{
+            "id": a.id,
+            "question_id": a.question_id,
+            "answer_text": a.answer_text,
+            "code": a.code,
+            "diagram_data": a.diagram_data,
+            "score": a.score,
+            "feedback": a.feedback
+        } for a in answers]
+
+    return data
 
 
 @bp.route('', methods=['GET'])
@@ -31,17 +69,14 @@ def get_submissions():
         query = query.filter_by(test_id=test_id)
     
     submissions = query.order_by(Submission.started_at.desc()).all()
-    
-    return jsonify([{
-        "id": s.id,
-        "test_id": s.test_id,
-        "test_name": s.test.name if s.test else None,
-        "user_id": s.user_id,
-        "username": s.user.username if s.user else None,
-        "started_at": s.started_at.isoformat() if s.started_at else None,
-        "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
-        "status": s.status
-    } for s in submissions]), 200
+
+    result = []
+    for s in submissions:
+        live_session = get_active_live_session(s.test, db_session)
+        auto_submit_if_expired(s, db_session, live_session)
+        result.append(_submission_response(s))
+
+    return jsonify(result), 200
 
 
 @bp.route('/<int:submission_id>', methods=['GET'])
@@ -61,33 +96,8 @@ def get_submission(submission_id):
     # Students can only see their own submissions
     if user.role == 'student' and submission.user_id != user_id:
         return jsonify({"error": "Access denied"}), 403
-    
-    # Get answers
-    answers = db_session.query(Answer).filter_by(submission_id=submission_id).all()
-    
-    answers_data = []
-    for answer in answers:
-        answers_data.append({
-            "id": answer.id,
-            "question_id": answer.question_id,
-            "answer_text": answer.answer_text,
-            "code": answer.code,
-            "diagram_data": answer.diagram_data,
-            "score": answer.score,
-            "feedback": answer.feedback
-        })
-    
-    return jsonify({
-        "id": submission.id,
-        "test_id": submission.test_id,
-        "test_name": submission.test.name if submission.test else None,
-        "user_id": submission.user_id,
-        "username": submission.user.username if submission.user else None,
-        "started_at": submission.started_at.isoformat() if submission.started_at else None,
-        "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
-        "status": submission.status,
-        "answers": answers_data
-    }), 200
+
+    return jsonify(_submission_response(submission, include_answers=True)), 200
 
 
 @bp.route('', methods=['POST'])
@@ -111,37 +121,38 @@ def create_submission():
     test = db_session.query(Test).filter_by(id=test_id).first()
     if not test:
         return jsonify({"error": "Test not found"}), 404
-    
-    # Check attempts
-    existing_submissions = db_session.query(Submission).filter_by(
-        test_id=test_id, user_id=user_id
-    ).count()
-    
+
+    live_session = get_active_live_session(test, db_session)
+
+    # Check attempts (per live session for live mode)
+    attempt_query = db_session.query(Submission).filter_by(test_id=test_id, user_id=user_id)
+    if test.test_mode == TEST_MODE_LIVE and live_session:
+        attempt_query = attempt_query.filter_by(live_session_id=live_session.id)
+    existing_submissions = attempt_query.count()
+
     if existing_submissions >= test.attempts_allowed:
         return jsonify({"error": "Maximum attempts reached"}), 400
-    
-    # Check availability
-    now = datetime.utcnow()
-    if test.available_from and now < test.available_from:
-        return jsonify({"error": "Test not yet available"}), 400
-    if test.available_until and now > test.available_until:
-        return jsonify({"error": "Test no longer available"}), 400
-    
+
+    if not can_start_test(test, live_session):
+        status = submission_timing_info(test, None, live_session)['availability_status']
+        if status == 'waiting':
+            return jsonify({"error": "Waiting for lecturer to start the test"}), 400
+        if status == 'upcoming':
+            return jsonify({"error": "Test not yet available"}), 400
+        return jsonify({"error": "Test is no longer available"}), 400
+
     submission = Submission(
         test_id=test_id,
         user_id=user_id,
+        live_session_id=live_session.id if live_session else None,
         status=SUBMISSION_STATUS_IN_PROGRESS
     )
     
     db_session.add(submission)
     db_session.commit()
-    
-    return jsonify({
-        "id": submission.id,
-        "test_id": submission.test_id,
-        "started_at": submission.started_at.isoformat() if submission.started_at else None,
-        "status": submission.status
-    }), 201
+    db_session.refresh(submission)
+
+    return jsonify(_submission_response(submission)), 201
 
 
 @bp.route('/<int:submission_id>/answers', methods=['POST'])
@@ -157,6 +168,10 @@ def save_answer(submission_id):
     
     if submission.user_id != user_id:
         return jsonify({"error": "Access denied"}), 403
+
+    live_session = get_active_live_session(submission.test, db_session)
+    if auto_submit_if_expired(submission, db_session, live_session):
+        return jsonify({"error": "Time expired. Test has been auto-submitted.", "auto_submitted": True}), 400
     
     if submission.status == SUBMISSION_STATUS_SUBMITTED:
         return jsonify({"error": "Cannot modify submitted answers"}), 400
@@ -222,6 +237,15 @@ def submit_submission(submission_id):
     
     if submission.user_id != user_id:
         return jsonify({"error": "Access denied"}), 403
+
+    live_session = get_active_live_session(submission.test, db_session)
+    if auto_submit_if_expired(submission, db_session, live_session):
+        return jsonify({
+            "id": submission.id,
+            "status": submission.status,
+            "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+            "auto_submitted": True
+        }), 200
     
     if submission.status == SUBMISSION_STATUS_SUBMITTED:
         return jsonify({"error": "Submission already submitted"}), 400

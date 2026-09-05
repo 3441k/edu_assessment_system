@@ -3,8 +3,10 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QTableWidget, QTableWidgetItem, QDialog, QLineEdit, 
                              QTextEdit, QSpinBox, QMessageBox,
-                             QListWidget, QListWidgetItem, QGroupBox, QHeaderView)
-from PyQt5.QtCore import Qt
+                             QListWidget, QListWidgetItem, QGroupBox, QHeaderView,
+                             QDateTimeEdit, QCheckBox)
+from PyQt5.QtCore import Qt, QDateTime
+from datetime import datetime
 
 
 class TestEditorWindow(QWidget):
@@ -168,6 +170,26 @@ class TestDialog(QDialog):
         self.attempts_spin.setValue(1)
         settings_layout.addWidget(self.attempts_spin)
         layout.addLayout(settings_layout)
+
+        avail_layout = QHBoxLayout()
+        self.use_available_from = QCheckBox("Available from")
+        self.available_from_edit = QDateTimeEdit()
+        self.available_from_edit.setCalendarPopup(True)
+        self.available_from_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.available_from_edit.setEnabled(False)
+        self.use_available_from.toggled.connect(self.available_from_edit.setEnabled)
+        avail_layout.addWidget(self.use_available_from)
+        avail_layout.addWidget(self.available_from_edit)
+
+        self.use_available_until = QCheckBox("Available until")
+        self.available_until_edit = QDateTimeEdit()
+        self.available_until_edit.setCalendarPopup(True)
+        self.available_until_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.available_until_edit.setEnabled(False)
+        self.use_available_until.toggled.connect(self.available_until_edit.setEnabled)
+        avail_layout.addWidget(self.use_available_until)
+        avail_layout.addWidget(self.available_until_edit)
+        layout.addLayout(avail_layout)
         
         # Questions selection
         layout.addWidget(QLabel("Select Questions:"))
@@ -245,6 +267,17 @@ class TestDialog(QDialog):
         self.desc_edit.setPlainText(self.test.get('description', ''))
         self.time_limit_spin.setValue(self.test.get('time_limit', 0) or 0)
         self.attempts_spin.setValue(self.test.get('attempts_allowed', 1))
+
+        if self.test.get('available_from'):
+            dt = datetime.fromisoformat(self.test['available_from'].replace('Z', '+00:00'))
+            self.use_available_from.setChecked(True)
+            self.available_from_edit.setEnabled(True)
+            self.available_from_edit.setDateTime(QDateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute))
+        if self.test.get('available_until'):
+            dt = datetime.fromisoformat(self.test['available_until'].replace('Z', '+00:00'))
+            self.use_available_until.setChecked(True)
+            self.available_until_edit.setEnabled(True)
+            self.available_until_edit.setDateTime(QDateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute))
         
         # Load test questions
         try:
@@ -303,6 +336,8 @@ class TestDialog(QDialog):
             'description': self.desc_edit.toPlainText(),
             'time_limit': self.time_limit_spin.value() or None,
             'attempts_allowed': self.attempts_spin.value(),
+            'available_from': self.available_from_edit.dateTime().toPyDateTime().isoformat() if self.use_available_from.isChecked() else None,
+            'available_until': self.available_until_edit.dateTime().toPyDateTime().isoformat() if self.use_available_until.isChecked() else None,
             'question_ids': question_ids
         }
         

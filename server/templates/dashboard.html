@@ -70,27 +70,56 @@ async function loadTests() {
                 'submitted': 'Submitted',
                 'graded': 'Graded'
             }[status] || 'Unknown';
+
+            const avail = test.availability_status || test.live_status || 'open';
+            const isLive = test.test_mode === 'live';
+            const availBadge = isLive ? {
+                'waiting': '<span class="badge bg-secondary ms-1">Waiting for lecturer</span>',
+                'live': '<span class="badge bg-success ms-1">LIVE</span>',
+                'ended': '<span class="badge bg-dark ms-1">Session ended</span>',
+            }[test.live_status] || '' : {
+                'upcoming': '<span class="badge bg-secondary ms-1">Opens later</span>',
+                'closed': '<span class="badge bg-dark ms-1">Closed</span>',
+                'open': ''
+            }[avail] || '';
             
             let actionButton = '';
-            if (status === 'not_started' || status === 'in_progress') {
+            if (test.can_access && (status === 'not_started' || status === 'in_progress')) {
                 actionButton = `<a href="/test/${test.id}" class="btn btn-primary">${status === 'not_started' ? 'Start Test' : 'Continue Test'}</a>`;
+            } else if (isLive && test.live_status === 'waiting') {
+                actionButton = `<span class="badge bg-secondary"><i class="fas fa-lock me-1"></i>Waiting for lecturer to start</span>`;
+            } else if (isLive && test.live_status === 'ended' && status === 'not_started') {
+                actionButton = `<span class="badge bg-dark">Live session ended</span>`;
+            } else if (!isLive && status === 'not_started' && avail === 'upcoming') {
+                actionButton = `<span class="badge bg-secondary">Opens ${test.available_from ? new Date(test.available_from).toLocaleString() : 'later'}</span>`;
+            } else if (!isLive && status === 'not_started' && avail === 'closed') {
+                actionButton = `<span class="badge bg-dark">Closed</span>`;
             } else if (status === 'submitted') {
                 actionButton = `<span class="badge bg-info">Submitted - Awaiting Grading</span>`;
             } else if (status === 'graded') {
                 actionButton = `<a href="/results/${test.submission_id}" class="btn btn-success">View Results</a>`;
             }
             
+            let scheduleInfo = '';
+            if (test.available_from || test.available_until) {
+                const from = test.available_from ? new Date(test.available_from).toLocaleString() : 'any time';
+                const until = test.available_until ? new Date(test.available_until).toLocaleString() : 'no end';
+                scheduleInfo = `<small class="text-muted d-block mt-2"><i class="fas fa-calendar me-1"></i>Available: ${from} – ${until}</small>`;
+            }
+            
             return `
                 <div class="col-md-6 mb-3">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="card-title">${test.name}</h5>
+                            <h5 class="card-title">${test.name}${availBadge}</h5>
                             <p class="card-text text-muted">${test.description || ''}</p>
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="badge bg-${statusClass}">${statusText}</span>
                                 ${actionButton}
                             </div>
-                            ${test.time_limit ? `<small class="text-muted d-block mt-2"><i class="fas fa-clock me-1"></i>Time limit: ${test.time_limit} minutes</small>` : ''}
+                            ${test.time_limit && !isLive ? `<small class="text-muted d-block mt-2"><i class="fas fa-clock me-1"></i>Duration: ${test.time_limit} minutes once started</small>` : ''}
+                            ${isLive && test.live_status === 'live' && test.live_seconds_remaining != null ? `<small class="text-danger d-block mt-2"><i class="fas fa-clock me-1"></i>Time left: ${Math.floor(test.live_seconds_remaining / 60)}:${String(test.live_seconds_remaining % 60).padStart(2, '0')}</small>` : ''}
+                            ${scheduleInfo}
                         </div>
                     </div>
                 </div>
@@ -123,6 +152,16 @@ async function checkAuth() {
 }
 
 checkAuth();
+
+// Refresh dashboard while waiting for live tests to start
+setInterval(async () => {
+    try {
+        const tests = await fetch('/api/v1/tests', { credentials: 'include' }).then(r => r.json());
+        if (tests.some(t => t.test_mode === 'live' && t.live_status === 'waiting')) {
+            loadTests();
+        }
+    } catch (e) { /* ignore */ }
+}, 10000);
 </script>
 {% endblock %}
 

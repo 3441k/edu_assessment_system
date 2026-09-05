@@ -23,7 +23,14 @@ SUBMISSION_STATUS_IN_PROGRESS = "in_progress"
 SUBMISSION_STATUS_SUBMITTED = "submitted"
 SUBMISSION_STATUS_GRADED = "graded"
 
-# API Endpoints
+# Test modes
+TEST_MODE_SCHEDULED = "scheduled"
+TEST_MODE_LIVE = "live"
+TEST_MODES = [TEST_MODE_SCHEDULED, TEST_MODE_LIVE]
+
+# Live session status
+LIVE_SESSION_LIVE = "live"
+LIVE_SESSION_ENDED = "ended"
 API_BASE = "/api/v1"
 API_AUTH = f"{API_BASE}/auth"
 API_TESTS = f"{API_BASE}/tests"

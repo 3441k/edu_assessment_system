@@ -51,10 +51,11 @@ def shutdown_session(exception=None):
 
 
 # Import and register routes
-from server.routes import auth, tests, questions, submissions, grading, statistics, students, topics, web, lecturer_web
+from server.routes import auth, tests, questions, submissions, grading, statistics, students, topics, web, lecturer_web, live
 
 app.register_blueprint(auth.bp)
 app.register_blueprint(tests.bp)
+app.register_blueprint(live.bp)
 app.register_blueprint(questions.bp)
 app.register_blueprint(submissions.bp)
 app.register_blueprint(grading.bp)

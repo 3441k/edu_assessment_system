@@ -133,7 +133,8 @@ class DashboardWindow(QWidget):
         action_layout.addStretch()
         
         # Action button
-        if status in ['not_started', 'in_progress']:
+        can_access = test.get('can_access', status in ['not_started', 'in_progress'])
+        if can_access and status in ['not_started', 'in_progress']:
             action_btn = QPushButton("Start Test" if status == 'not_started' else "Continue Test")
             action_btn.clicked.connect(lambda checked, t=test: self.start_test(t))
             action_layout.addWidget(action_btn)

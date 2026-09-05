@@ -34,6 +34,23 @@ const LecturerUI = {
             <tbody>${rows.join('')}</tbody></table></div>`;
     },
 
+    isoToLocalDatetime(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    },
+
+    localDatetimeToISO(localValue) {
+        if (!localValue) return null;
+        return new Date(localValue).toISOString();
+    },
+
+    formatDatetime(iso) {
+        if (!iso) return '-';
+        return new Date(iso).toLocaleString();
+    },
+
     async init() {
         try {
             const me = await this.api('GET', '/api/v1/auth/me');
@@ -47,7 +64,14 @@ const LecturerUI = {
         await this.loadQuestions();
         document.getElementById('topicFilter').addEventListener('change', () => this.loadQuestions());
 
-        document.querySelector('[data-bs-target="#testsTab"]')?.addEventListener('shown.bs.tab', () => this.loadTests());
+        document.querySelector('[data-bs-target="#testsTab"]')?.addEventListener('shown.bs.tab', () => {
+            this.loadTests();
+            if (this._testsPoll) clearInterval(this._testsPoll);
+            this._testsPoll = setInterval(() => this.loadTests(), 5000);
+        });
+        document.querySelector('[data-bs-target="#questionsTab"]')?.addEventListener('shown.bs.tab', () => {
+            if (this._testsPoll) { clearInterval(this._testsPoll); this._testsPoll = null; }
+        });
         document.querySelector('[data-bs-target="#gradingTab"]')?.addEventListener('shown.bs.tab', () => this.loadGrading());
         document.querySelector('[data-bs-target="#statisticsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStatistics());
         document.querySelector('[data-bs-target="#studentsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStudents());
@@ -215,21 +239,81 @@ const LecturerUI = {
     },
 
     // --- Tests ---
+    onTestModeChange() {
+        const mode = document.getElementById('testMode').value;
+        document.getElementById('scheduledTestFields').style.display = mode === 'scheduled' ? 'block' : 'none';
+        document.getElementById('liveTestFields').style.display = mode === 'live' ? 'block' : 'none';
+    },
+
+    liveStatusBadge(t) {
+        if (t.test_mode !== 'live') return '<span class="badge bg-secondary">Scheduled</span>';
+        const map = { waiting: 'secondary', live: 'success', ended: 'dark' };
+        const labels = { waiting: 'Waiting', live: 'LIVE', ended: 'Ended' };
+        const s = t.live_status || 'waiting';
+        return `<span class="badge bg-${map[s] || 'secondary'}">${labels[s] || s}</span>`;
+    },
+
+    liveControlButtons(t) {
+        if (t.test_mode !== 'live') return '-';
+        const s = t.live_status || 'waiting';
+        if (s === 'live') {
+            const rem = t.live_seconds_remaining != null ? `${Math.floor(t.live_seconds_remaining / 60)}:${String(t.live_seconds_remaining % 60).padStart(2, '0')}` : '';
+            return `<span class="text-danger fw-bold me-2">${rem}</span>
+                <button class="btn btn-sm btn-warning" onclick="LecturerUI.extendLive(${t.id}, 5)">+5m</button>
+                <button class="btn btn-sm btn-warning" onclick="LecturerUI.extendLive(${t.id}, 10)">+10m</button>
+                <button class="btn btn-sm btn-danger" onclick="LecturerUI.endLive(${t.id})">End</button>`;
+        }
+        return `<button class="btn btn-sm btn-success" onclick="LecturerUI.showGoLiveModal(${t.id})">Go Live</button>`;
+    },
+
     async loadTests() {
         this.tests = await this.api('GET', '/api/v1/tests');
         const rows = this.tests.map(t => `<tr>
             <td>${t.id}</td>
             <td>${this.escapeHtml(t.name)}</td>
-            <td>${t.question_count ?? '?'}</td>
-            <td>${t.time_limit ? t.time_limit + ' min' : 'No limit'}</td>
+            <td>${this.liveStatusBadge(t)}</td>
+            <td>${t.test_mode === 'live' ? 'Live control' : (t.time_limit ? t.time_limit + ' min' : 'No limit')}</td>
+            <td>${this.liveControlButtons(t)}</td>
             <td class="table-actions">
                 <button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.showTestModal(${t.id})">Edit</button>
                 <button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteTest(${t.id})">Delete</button>
             </td>
         </tr>`);
         document.getElementById('testsTable').innerHTML = this.tableHtml(
-            ['ID', 'Name', 'Questions', 'Time Limit', 'Actions'], rows
+            ['ID', 'Name', 'Status', 'Timing', 'Live Control', 'Actions'], rows
         );
+    },
+
+    showGoLiveModal(testId) {
+        document.getElementById('goLiveTestId').value = testId;
+        document.getElementById('goLiveDuration').value = '45';
+        new bootstrap.Modal(document.getElementById('goLiveModal')).show();
+    },
+
+    async confirmGoLive() {
+        const testId = document.getElementById('goLiveTestId').value;
+        const duration = parseInt(document.getElementById('goLiveDuration').value);
+        if (!duration || duration <= 0) return alert('Enter a valid duration');
+        try {
+            await this.api('POST', `/api/v1/tests/${testId}/live/start`, { duration_minutes: duration });
+            bootstrap.Modal.getInstance(document.getElementById('goLiveModal')).hide();
+            await this.loadTests();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
+    async extendLive(testId, minutes) {
+        try {
+            await this.api('POST', `/api/v1/tests/${testId}/live/extend`, { minutes });
+            await this.loadTests();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
+    async endLive(testId) {
+        if (!confirm('End the live session now? All in-progress tests will be auto-submitted.')) return;
+        try {
+            await this.api('POST', `/api/v1/tests/${testId}/live/end`);
+            await this.loadTests();
+        } catch (e) { alert('Error: ' + e.message); }
     },
 
     async showTestModal(testId) {
@@ -239,6 +323,10 @@ const LecturerUI = {
         document.getElementById('testDescription').value = '';
         document.getElementById('testTimeLimit').value = '0';
         document.getElementById('testAttempts').value = '1';
+        document.getElementById('testAvailableFrom').value = '';
+        document.getElementById('testAvailableUntil').value = '';
+        document.getElementById('testMode').value = 'scheduled';
+        this.onTestModeChange();
 
         this.allQuestions = await this.api('GET', '/api/v1/questions');
         let selectedIds = [];
@@ -247,8 +335,13 @@ const LecturerUI = {
             const test = await this.api('GET', `/api/v1/tests/${testId}`);
             document.getElementById('testName').value = test.name;
             document.getElementById('testDescription').value = test.description || '';
+            document.getElementById('testMode').value = test.test_mode || 'scheduled';
+            this.onTestModeChange();
             document.getElementById('testTimeLimit').value = test.time_limit || 0;
             document.getElementById('testAttempts').value = test.attempts_allowed || 1;
+            document.getElementById('testAttemptsLive').value = test.attempts_allowed || 1;
+            document.getElementById('testAvailableFrom').value = this.isoToLocalDatetime(test.available_from);
+            document.getElementById('testAvailableUntil').value = this.isoToLocalDatetime(test.available_until);
             selectedIds = (test.questions || []).sort((a, b) => a.order - b.order).map(q => q.id);
         }
 
@@ -285,6 +378,10 @@ const LecturerUI = {
         if (!name) return alert('Test name is required');
 
         const timeLimit = parseInt(document.getElementById('testTimeLimit').value);
+        const testMode = document.getElementById('testMode').value;
+        const attempts = testMode === 'live'
+            ? parseInt(document.getElementById('testAttemptsLive').value)
+            : parseInt(document.getElementById('testAttempts').value);
         const question_ids = [...document.querySelectorAll('.test-q-check:checked')].map((cb, i) => ({
             question_id: parseInt(cb.value), order: i + 1
         }));
@@ -292,10 +389,15 @@ const LecturerUI = {
         const data = {
             name,
             description: document.getElementById('testDescription').value.trim(),
-            time_limit: timeLimit > 0 ? timeLimit : null,
-            attempts_allowed: parseInt(document.getElementById('testAttempts').value),
+            test_mode: testMode,
+            attempts_allowed: attempts,
             question_ids
         };
+        if (testMode === 'scheduled') {
+            data.time_limit = timeLimit > 0 ? timeLimit : null;
+            data.available_from = this.localDatetimeToISO(document.getElementById('testAvailableFrom').value);
+            data.available_until = this.localDatetimeToISO(document.getElementById('testAvailableUntil').value);
+        }
 
         try {
             if (id) await this.api('PUT', `/api/v1/tests/${id}`, data);

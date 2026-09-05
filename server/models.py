@@ -7,7 +7,9 @@ from sqlalchemy.orm import relationship
 from shared.constants import (
     ROLE_LECTURER, ROLE_STUDENT,
     QUESTION_TYPE_MULTIPLE_CHOICE, QUESTION_TYPE_CODE, QUESTION_TYPE_DIAGRAM, QUESTION_TYPE_TEXT,
-    SUBMISSION_STATUS_NOT_STARTED, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED
+    SUBMISSION_STATUS_NOT_STARTED, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED,
+    TEST_MODE_SCHEDULED, TEST_MODE_LIVE,
+    LIVE_SESSION_LIVE, LIVE_SESSION_ENDED,
 )
 
 Base = declarative_base()
@@ -72,10 +74,29 @@ class Test(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     available_from = Column(DateTime, nullable=True)
     available_until = Column(DateTime, nullable=True)
+    test_mode = Column(String(20), default=TEST_MODE_SCHEDULED, nullable=False)
     
     # Relationships
     test_questions = relationship("TestQuestion", back_populates="test", cascade="all, delete-orphan")
     submissions = relationship("Submission", back_populates="test")
+    live_sessions = relationship("LiveSession", back_populates="test", cascade="all, delete-orphan")
+
+
+class LiveSession(Base):
+    """A lecturer-controlled live window for a test."""
+    __tablename__ = "live_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    test_id = Column(Integer, ForeignKey("tests.id"), nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    ends_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default=LIVE_SESSION_LIVE, nullable=False)
+    started_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    duration_minutes = Column(Integer, nullable=False)
+
+    test = relationship("Test", back_populates="live_sessions")
+    submissions = relationship("Submission", back_populates="live_session")
 
 
 class TestQuestion(Base):
@@ -100,6 +121,7 @@ class Submission(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     test_id = Column(Integer, ForeignKey("tests.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    live_session_id = Column(Integer, ForeignKey("live_sessions.id"), nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow)
     submitted_at = Column(DateTime, nullable=True)
     status = Column(String(50), default=SUBMISSION_STATUS_NOT_STARTED, nullable=False)
@@ -107,6 +129,7 @@ class Submission(Base):
     # Relationships
     test = relationship("Test", back_populates="submissions")
     user = relationship("User", back_populates="submissions")
+    live_session = relationship("LiveSession", back_populates="submissions")
     answers = relationship("Answer", back_populates="submission", cascade="all, delete-orphan")
     grade = relationship("Grade", back_populates="submission", uselist=False)
 

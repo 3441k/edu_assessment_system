@@ -37,7 +37,7 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 id="testName">Loading...</h4>
-                <div id="timer" class="timer"></div>
+                <div id="timer" class="timer" style="display: none;"></div>
             </div>
             <div class="card-body">
                 <div id="questionsContainer"></div>
@@ -88,21 +88,30 @@ async function loadTest() {
         
         testData = await response.json();
         document.getElementById('testName').textContent = testData.name;
-        timeLimit = testData.time_limit;
         
         // Create or get submission
         await createSubmission();
         
-        // Load existing answers
+        // Load existing answers and timing
         await loadAnswers();
         
+        // Start timer from server-calculated remaining time
+        const timing = window.submissionTiming || {};
+        if (timing.time_expired || testData.submission_status === 'submitted') {
+            alert('Time expired. Your test has been submitted.');
+            window.location.href = '/dashboard';
+            return;
+        }
+        const seconds = timing.seconds_remaining ?? testData.live_seconds_remaining ?? testData.seconds_remaining;
+        if (seconds != null && seconds > 0) {
+            startTimer(seconds);
+        } else if (testData.available_until && testData.test_mode !== 'live') {
+            const remaining = Math.max(0, Math.floor((new Date(testData.available_until) - new Date()) / 1000));
+            if (remaining > 0) startTimer(remaining);
+        }
+
         // Render questions
         renderQuestions();
-        
-        // Start timer if time limit exists
-        if (timeLimit) {
-            startTimer();
-        }
         
     } catch (error) {
         console.error('Error loading test:', error);
@@ -153,11 +162,15 @@ async function loadAnswers() {
         
         if (response.ok) {
             const submission = await response.json();
-            // Store answers for later use
             window.savedAnswers = {};
             submission.answers.forEach(answer => {
                 window.savedAnswers[answer.question_id] = answer;
             });
+            window.submissionTiming = {
+                seconds_remaining: submission.seconds_remaining,
+                time_expired: submission.time_expired,
+                deadline_at: submission.deadline_at
+            };
         }
     } catch (error) {
         console.error('Error loading answers:', error);
@@ -280,28 +293,33 @@ function showQuestion(index) {
     currentQuestion = index;
 }
 
-function startTimer() {
-    if (!timeLimit) return;
+function startTimer(seconds) {
+    if (seconds == null || seconds <= 0) return;
     
-    // Calculate remaining time (simplified - in real app, track start time)
-    timeRemaining = timeLimit * 60; // Convert to seconds
+    timeRemaining = seconds;
+    document.getElementById('timer').style.display = 'block';
     
+    if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
         timeRemaining--;
         const minutes = Math.floor(timeRemaining / 60);
-        const seconds = timeRemaining % 60;
-        document.getElementById('timer').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        const secs = timeRemaining % 60;
+        document.getElementById('timer').textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
         
         if (timeRemaining <= 0) {
             clearInterval(timerInterval);
             alert('Time is up! Submitting test...');
-            submitTest();
+            submitTest(true);
         }
     }, 1000);
+    
+    const minutes = Math.floor(timeRemaining / 60);
+    const secs = timeRemaining % 60;
+    document.getElementById('timer').textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-async function saveProgress() {
-    if (!submissionId) return;
+async function saveProgress(silent = false) {
+    if (!submissionId) return false;
     
     for (const question of testData.questions) {
         let answerData = {};
@@ -331,28 +349,37 @@ async function saveProgress() {
             answerData.question_id = question.id;
             
             try {
-                await fetch(`/api/v1/submissions/${submissionId}/answers`, {
+                const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
                     body: JSON.stringify(answerData)
                 });
+                if (res.status === 400) {
+                    const err = await res.json();
+                    if (err.auto_submitted) {
+                        alert('Time expired. Your test has been auto-submitted.');
+                        window.location.href = '/dashboard';
+                        return false;
+                    }
+                }
             } catch (error) {
                 console.error('Error saving answer:', error);
             }
         }
     }
     
-    alert('Progress saved!');
+    if (!silent) alert('Progress saved!');
+    return true;
 }
 
-async function submitTest() {
-    if (!confirm('Are you sure you want to submit? You cannot modify answers after submission.')) {
+async function submitTest(skipConfirm = false) {
+    if (!skipConfirm && !confirm('Are you sure you want to submit? You cannot modify answers after submission.')) {
         return;
     }
     
-    // Save all answers first
-    await saveProgress();
+    // Save all answers first (silent)
+    await saveProgress(true);
     
     // Submit
     try {
@@ -362,6 +389,10 @@ async function submitTest() {
         });
         
         if (response.ok) {
+            const data = await response.json();
+            if (data.auto_submitted) {
+                alert('Time expired. Your test has been auto-submitted.');
+            }
             if (timerInterval) clearInterval(timerInterval);
             window.location.href = '/dashboard';
         } else {
@@ -424,7 +455,7 @@ document.getElementById('saveBtn').addEventListener('click', saveProgress);
 document.getElementById('submitBtn').addEventListener('click', submitTest);
 
 // Auto-save every 30 seconds
-setInterval(saveProgress, 30000);
+setInterval(() => saveProgress(true), 30000);
 
 loadTest();
 </script>

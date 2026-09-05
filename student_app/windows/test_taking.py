@@ -108,8 +108,21 @@ class TestTakingWindow(QDialog):
             # Render questions
             self.render_questions()
             
-            # Start timer if needed
-            if self.test_data.get('time_limit'):
+            # Start timer from server-calculated remaining time
+            seconds_remaining = None
+            if self.submission_id:
+                try:
+                    submission = self.api_client.get_submission(self.submission_id)
+                    if submission.get('time_expired') or submission.get('status') == 'submitted':
+                        QMessageBox.information(self, "Test Submitted", "Time expired. Your test has been submitted.")
+                        self.reject()
+                        return
+                    seconds_remaining = submission.get('seconds_remaining')
+                except Exception:
+                    pass
+            if seconds_remaining is not None:
+                self.start_timer(seconds_remaining)
+            elif self.test_data.get('time_limit'):
                 self.start_timer(self.test_data['time_limit'] * 60)
             
         except Exception as e:
@@ -321,25 +334,26 @@ class TestTakingWindow(QDialog):
             QMessageBox.warning(self, "Error", "No submission to submit")
             return
         
-        reply = QMessageBox.question(
-            self, "Confirm Submission",
-            "Are you sure you want to submit? You cannot modify answers after submission.",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        auto_submit = self.time_remaining is not None and self.time_remaining <= 0
+        if not auto_submit:
+            reply = QMessageBox.question(
+                self, "Confirm Submission",
+                "Are you sure you want to submit? You cannot modify answers after submission.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
         
-        if reply == QMessageBox.Yes:
-            try:
-                # Save progress first
-                self.save_progress()
-                
-                # Submit
-                self.api_client.submit_submission(self.submission_id)
-                
-                if self.timer:
-                    self.timer.stop()
-                
+        try:
+            self.save_progress()
+            self.api_client.submit_submission(self.submission_id)
+            if self.timer:
+                self.timer.stop()
+            if auto_submit:
+                QMessageBox.information(self, "Time Up", "Time expired. Your test has been submitted.")
+            else:
                 QMessageBox.information(self, "Success", "Test submitted successfully!")
-                self.accept()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to submit test: {str(e)}")
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to submit test: {str(e)}")
 
