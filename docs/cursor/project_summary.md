@@ -115,6 +115,13 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 - [x] Student drill-down: score trend, per-test list, per-question score summary
 - [x] One-click links to `/lecturer/grading/<submission_id>` from statistics views
 
+### Phase 9: Student Groups
+- [x] `Group` model and `users.group_id` migration
+- [x] Groups API and **Groups** tab (CRUD, member list, averages)
+- [x] Student group assignment (add/edit UI, CSV `group` column)
+- [x] Statistics group filter and **Compare groups** view (matrix, charts, Unassigned as separate row)
+- [x] Fix lecturer dashboard JS syntax error that blocked tab loading
+
 ## File Structure
 
 ```
@@ -136,6 +143,7 @@ edu_assessment_system/
 │   │   ├── grading.py
 │   │   ├── statistics.py
 │   │   ├── students.py
+│   │   ├── groups.py
 │   │   ├── topics.py
 │   │   ├── web.py             # Student web interface routes
 │   │   └── lecturer_web.py    # Lecturer web interface routes

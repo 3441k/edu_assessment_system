@@ -102,9 +102,10 @@ Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`le
 1. **Manage Topics**: Create topics to organize questions
 2. **Question Bank**: Add questions; select one or more answer types per question (multiple choice, text, code, diagram)
 3. **Create Tests**: Combine questions from the question bank into tests
-4. **Student Management**: Add students manually or import from CSV
-5. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize
-6. **Statistics**: Open the **Statistics** tab for class overview charts, then drill down into tests or students (see below)
+4. **Student Management**: Add students manually or import from CSV; assign each student to one **group** (or leave Unassigned)
+5. **Groups**: Create and manage student groups on the **Groups** tab; view group members and average grades
+6. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize
+7. **Statistics**: Class overview charts, filter by group, **Compare groups** view, drill-down to test/student score summaries
 
 When creating questions on the web **Question Bank** tab, check one or more **answer types** to combine components on a single question (e.g. written answer + diagram).
 
@@ -132,7 +133,14 @@ The **Statistics** tab provides a class overview first, then drill-down views:
 | **Student statistics** | Score trend across tests, per-test scores; click a test for per-question score summary |
 | **Student + test** | Total score and per-question breakdown (scores only); **Open grading** for full answers |
 
-Use the **Focus test** dropdown on the overview to change which test drives the distribution chart. Breadcrumb links at the top help navigate back. Grading stays on its own tab but is linked from statistics rows.
+Use the **Focus test** dropdown on the overview to change which test drives the distribution chart. Use the **Group** filter to limit charts and tables to one group (including **Unassigned**). Click **Compare groups** for side-by-side group averages, a summary matrix, and per-group score distributions. Breadcrumb links at the top help navigate back. Grading stays on its own tab but is linked from statistics rows.
+
+#### Groups
+
+- **Groups tab**: create, edit, delete groups; view members and group average grade
+- **Students tab**: assign a group when adding/editing a student; filter the list by group
+- **Unassigned** appears as its own group wherever groups are compared (students with no group assigned)
+- **Statistics**: filter any stats view by group, or open **Compare groups** for a full cross-group summary
 
 ### For Students:
 
@@ -150,12 +158,13 @@ For importing students, use a CSV file with the following columns:
 - `username` (required)
 - `password` (required)
 - `student_id` (optional)
+- `group` (optional — group name; created automatically if it does not exist)
 
 Example:
 ```csv
-username,password,student_id
-student1,password123,STU001
-student2,password456,STU002
+username,password,student_id,group
+student1,password123,STU001,CS-2024-A
+student2,password456,STU002,CS-2024-B
 ```
 
 ## Troubleshooting

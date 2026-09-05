@@ -24,10 +24,24 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False)  # 'lecturer' or 'student'
     student_id = Column(String(50), unique=True, nullable=True)  # Only for students
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     submissions = relationship("Submission", back_populates="user")
+    group = relationship("Group", back_populates="students")
+
+
+class Group(Base):
+    """Student group (e.g. class section or lab group)."""
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    students = relationship("User", back_populates="group")
 
 
 class Topic(Base):

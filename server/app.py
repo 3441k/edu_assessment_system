@@ -51,7 +51,7 @@ def shutdown_session(exception=None):
 
 
 # Import and register routes
-from server.routes import auth, tests, questions, submissions, grading, statistics, students, topics, web, lecturer_web, live
+from server.routes import auth, tests, questions, submissions, grading, statistics, students, groups, topics, web, lecturer_web, live
 
 app.register_blueprint(auth.bp)
 app.register_blueprint(tests.bp)
@@ -61,6 +61,7 @@ app.register_blueprint(submissions.bp)
 app.register_blueprint(grading.bp)
 app.register_blueprint(statistics.bp)
 app.register_blueprint(students.bp)
+app.register_blueprint(groups.bp)
 app.register_blueprint(topics.bp)
 app.register_blueprint(web.bp)
 app.register_blueprint(lecturer_web.bp)
@@ -86,6 +87,7 @@ def api_info():
             "grading": "/api/v1/grading",
             "statistics": "/api/v1/statistics",
             "students": "/api/v1/students",
+            "groups": "/api/v1/groups",
             "topics": "/api/v1/topics"
         }
     }

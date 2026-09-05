@@ -46,6 +46,9 @@ def run_migrations():
     if _table_exists(cursor, "questions") and not _column_exists(cursor, "questions", "answer_types"):
         cursor.execute("ALTER TABLE questions ADD COLUMN answer_types JSON")
 
+    if _table_exists(cursor, "users") and not _column_exists(cursor, "users", "group_id"):
+        cursor.execute("ALTER TABLE users ADD COLUMN group_id INTEGER REFERENCES groups(id)")
+
     conn.commit()
     conn.close()
 

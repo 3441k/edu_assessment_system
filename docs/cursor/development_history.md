@@ -62,6 +62,12 @@
 - Drill-down: test statistics (distribution, question breakdown, student table) and student statistics (trend, per-test/per-question scores)
 - Heavy linking to grading page from statistics rows
 
+#### Phase 9: Student Groups
+- One group per student; Unassigned shown as separate row in comparisons
+- Groups tab + group picker on Students tab
+- CSV import with optional `group` column
+- Statistics group filter and Compare groups view
+
 ## Critical Issues and Fixes
 
 ### Issue 1: Circular Import Error
@@ -223,6 +229,24 @@
 - `server/templates/lecturer/dashboard.html`
 - `README.md`, `QUICKSTART.md`, `docs/cursor/*`
 
+## Feature: Student Groups
+
+**Date**: September 2026
+**Request**: Students belong to groups; manage groups in UI; compare group results by test; Unassigned as separate comparison row
+
+**Implementation**:
+- Added `Group` model, `users.group_id`, migration in `database/migrate.py`
+- Created `server/routes/groups.py`; extended students and statistics routes
+- Groups tab, student group assignment/edit, CSV import with `group` column
+- Statistics group filter and Compare groups view in `lecturer.js`
+- Fixed stray braces in `lecturer.js` that broke dashboard initialization
+
+**Files Changed**:
+- `server/models.py`, `database/migrate.py`, `shared/constants.py`, `server/app.py`
+- `server/routes/groups.py`, `server/routes/students.py`, `server/routes/statistics.py`
+- `server/static/js/lecturer.js`, `server/templates/lecturer/dashboard.html`
+- `README.md`, `QUICKSTART.md`, `docs/cursor/*`
+
 ## UI/UX Improvements
 
 ### Login Window Redesign
@@ -280,6 +304,7 @@
 - [x] Grading score validation with clear error messages
 - [x] Student results viewing for graded scheduled and live tests
 - [x] Lecturer web statistics redesign (overview charts, filters, drill-down, grading links)
+- [x] Student groups (Groups tab, CSV import, compare groups in statistics)
 
 ### Known Limitations
 - Code execution sandbox could be more secure

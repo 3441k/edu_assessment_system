@@ -71,12 +71,21 @@ Submission endpoints call `auto_submit_if_expired()` from `test_schedule.py` to 
 - `GET /students` - Student list with averages. Query: `q` (search username or student ID)
 - `GET /students/<id>` - Student detail: tests taken, grades, trend chart data (lecturer only)
 - `GET /students/<id>/tests/<test_id>` - Per-question score summary for one student on one test (lecturer only)
+- `GET /groups/compare` - Cross-group comparison: matrix, bar chart data, per-group distributions. Query: `test_id` (optional, for distribution chart)
+- All statistics list/detail endpoints accept optional `group_id` query (`0` = Unassigned students only)
+
+### Groups (`/api/v1/groups`)
+- `GET /` - List groups with student counts and average graded %; includes virtual **Unassigned** row when applicable
+- `POST /` - Create group (lecturer only)
+- `GET /<id>` - Group detail with student list (`id=0` for Unassigned)
+- `PUT /<id>` - Update group name/description (lecturer only)
+- `DELETE /<id>` - Delete group; students move to Unassigned (lecturer only)
 
 ### Students (`/api/v1/students`)
-- `GET /` - Get all students (lecturer only)
-- `POST /` - Create student (lecturer only)
-- `POST /import` - Import students from CSV (lecturer only)
-- `PUT /<id>` - Update student (lecturer only)
+- `GET /` - Get all students (lecturer only). Query: `group_id` (`0` = unassigned)
+- `POST /` - Create student with optional `group_id` (lecturer only)
+- `POST /import` - Import students from CSV; optional `group` column creates groups (lecturer only)
+- `PUT /<id>` - Update student including `group_id` (lecturer only)
 - `DELETE /<id>` - Delete student (lecturer only)
 
 ## Web Interface Routes
@@ -110,13 +119,14 @@ Implemented in `server/routes/lecturer_web.py`. Uses `require_lecturer()` for pr
 
 ### Lecturer Dashboard Tabs
 
-The dashboard (`server/templates/lecturer/dashboard.html`) provides five tabs, each calling the REST API via `server/static/js/lecturer.js`:
+The dashboard (`server/templates/lecturer/dashboard.html`) provides seven tabs, each calling the REST API via `server/static/js/lecturer.js`:
 
 1. **Question Bank** — list/filter questions, manage topics, add/edit/delete questions with one or more answer types
 2. **Tests** — list tests, create/edit tests with question selection, set test mode (scheduled vs live), availability window, and time limit; for live tests, use Go Live / Extend / End controls
 3. **Grading** — list submitted/graded submissions, link to grading page
-4. **Statistics** — class overview with Chart.js (test averages, score distribution, weak topics); browse tests/students with search and filters; drill-down to test statistics (question breakdown, student table) and student statistics (trend, per-test score summary); links to grading page
-5. **Students** — list students, add manually, import CSV, delete
+4. **Statistics** — class overview with Chart.js; group filter on all views; **Compare groups** (matrix, bar chart, distributions); browse tests/students with search/filters; drill-down to test/student score summaries; links to grading
+5. **Groups** — create/edit/delete groups, view members, jump to group statistics
+6. **Students** — list/filter by group, add/edit with group assignment, CSV import with `group` column, delete
 
 ### Role Separation
 

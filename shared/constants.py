@@ -40,7 +40,11 @@ API_SUBMISSIONS = f"{API_BASE}/submissions"
 API_GRADING = f"{API_BASE}/grading"
 API_STATISTICS = f"{API_BASE}/statistics"
 API_STUDENTS = f"{API_BASE}/students"
+API_GROUPS = f"{API_BASE}/groups"
 API_TOPICS = f"{API_BASE}/topics"
+
+# Virtual group id for students without a group (API responses only)
+GROUP_UNASSIGNED_ID = 0
 
 # Default Configuration
 DEFAULT_SERVER_HOST = "0.0.0.0"

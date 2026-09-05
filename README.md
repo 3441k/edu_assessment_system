@@ -13,7 +13,7 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 - **Live Tests**: Lecturer-controlled sessions with Go Live, Extend, and End; global deadline and auto-submit for all students
 - **Auto & Manual Grading**: Automatic code execution with test cases, manual grading for all question types
 - **Student Results**: Graded submissions show scores and feedback on the dashboard; available after the test window closes for scheduled tests
-- **Statistics & Analytics** (lecturer web): Class overview with Chart.js charts, test focus picker, weak-topic highlights, searchable test/student lists with filters, and drill-down to per-test and per-student score summaries with one-click links to grading
+- **Statistics & Analytics** (lecturer web): Class overview with Chart.js charts, test focus picker, weak-topic highlights, searchable test/student lists with filters, drill-down score summaries, **student groups** with cross-group comparison, and one-click links to grading
 - **Export**: CSV grades export and PDF report generation
 
 ## Architecture

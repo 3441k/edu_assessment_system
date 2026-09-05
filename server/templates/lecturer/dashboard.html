@@ -32,6 +32,7 @@
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#testsTab">Tests</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#gradingTab">Grading</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statisticsTab">Statistics</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#groupsTab">Groups</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#studentsTab">Students</button></li>
 </ul>
 
@@ -72,12 +73,26 @@
         <div id="statisticsContent"></div>
     </div>
 
+    <!-- Groups -->
+    <div class="tab-pane fade" id="groupsTab">
+        <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-primary btn-sm" onclick="LecturerUI.showGroupModal()">Create Group</button>
+        </div>
+        <div id="groupsTable"></div>
+    </div>
+
     <!-- Students -->
     <div class="tab-pane fade" id="studentsTab">
-        <div class="d-flex justify-content-end gap-2 mb-3">
-            <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('csvImport').click()">Import CSV</button>
-            <input type="file" id="csvImport" accept=".csv" style="display:none" onchange="LecturerUI.importStudents(this)">
-            <button class="btn btn-primary btn-sm" onclick="LecturerUI.showStudentModal()">Add Student</button>
+        <div class="d-flex justify-content-between flex-wrap gap-2 mb-3">
+            <div class="d-flex gap-2 align-items-center">
+                <label class="form-label mb-0 small">Group:</label>
+                <select id="studentGroupFilter" class="form-select form-select-sm" style="width:auto;min-width:160px;" onchange="LecturerUI.loadStudents()"></select>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('csvImport').click()">Import CSV</button>
+                <input type="file" id="csvImport" accept=".csv" style="display:none" onchange="LecturerUI.importStudents(this)">
+                <button class="btn btn-primary btn-sm" onclick="LecturerUI.showStudentModal()">Add Student</button>
+            </div>
         </div>
         <div id="studentsTable"></div>
     </div>
@@ -256,26 +271,59 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Student</h5>
+                <h5 class="modal-title" id="studentModalTitle">Add Student</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <input type="hidden" id="studentEditId">
                 <div class="mb-3">
                     <label class="form-label">Username</label>
                     <input type="text" id="studentUsername" class="form-control">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Password</label>
+                    <label class="form-label" id="studentPasswordLabel">Password</label>
                     <input type="password" id="studentPassword" class="form-control">
+                    <small class="text-muted" id="studentPasswordHint"></small>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Student ID (optional)</label>
                     <input type="text" id="studentIdField" class="form-control">
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">Group</label>
+                    <select id="studentGroupSelect" class="form-select"></select>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="LecturerUI.saveStudent()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Group Modal -->
+<div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="groupModalTitle">Create Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="groupEditId">
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input type="text" id="groupName" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description (optional)</label>
+                    <textarea id="groupDescription" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="LecturerUI.saveGroup()">Save</button>
             </div>
         </div>
     </div>

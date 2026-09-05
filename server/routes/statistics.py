@@ -2,8 +2,8 @@
 
 from flask import Blueprint, request, jsonify, session
 from server.database import db_session
-from server.models import User, Submission, Answer, Grade, Question, Topic, Test, TestQuestion
-from shared.constants import API_STATISTICS, SUBMISSION_STATUS_GRADED
+from server.models import User, Submission, Answer, Grade, Question, Topic, Test, TestQuestion, Group
+from shared.constants import API_STATISTICS, SUBMISSION_STATUS_GRADED, GROUP_UNASSIGNED_ID, ROLE_STUDENT
 from sqlalchemy import func
 
 bp = Blueprint('statistics', __name__, url_prefix=API_STATISTICS)
@@ -22,7 +22,61 @@ def require_lecturer():
     return user, None, None
 
 
-def _topic_statistics_list():
+def _parse_group_id_param():
+    raw = request.args.get('group_id')
+    if raw is None or raw == '':
+        return None
+    if str(raw) in ('0', str(GROUP_UNASSIGNED_ID)):
+        return GROUP_UNASSIGNED_ID
+    return int(raw)
+
+
+def _student_ids_for_group(group_id):
+    if group_id is None:
+        return None
+    if group_id == GROUP_UNASSIGNED_ID:
+        rows = db_session.query(User.id).filter_by(role=ROLE_STUDENT, group_id=None).all()
+    else:
+        rows = db_session.query(User.id).filter_by(role=ROLE_STUDENT, group_id=group_id).all()
+    return [r[0] for r in rows]
+
+
+def _grades_for_test(test_id, group_id=None):
+    query = db_session.query(Grade).join(Submission).filter(Submission.test_id == test_id)
+    student_ids = _student_ids_for_group(group_id)
+    if student_ids is not None:
+        if not student_ids:
+            return []
+        query = query.filter(Submission.user_id.in_(student_ids))
+    return query.all()
+
+
+def _submissions_for_test(test_id, group_id=None):
+    query = db_session.query(Submission).filter_by(test_id=test_id)
+    student_ids = _student_ids_for_group(group_id)
+    if student_ids is not None:
+        if not student_ids:
+            return []
+        query = query.filter(Submission.user_id.in_(student_ids))
+    return query.all()
+
+
+def _group_entries_for_compare():
+    entries = []
+    for group in db_session.query(Group).order_by(Group.name).all():
+        count = db_session.query(User).filter_by(role=ROLE_STUDENT, group_id=group.id).count()
+        entries.append({"group_id": group.id, "group_name": group.name, "student_count": count})
+    unassigned = db_session.query(User).filter_by(role=ROLE_STUDENT, group_id=None).count()
+    if unassigned:
+        entries.append({
+            "group_id": GROUP_UNASSIGNED_ID,
+            "group_name": "Unassigned",
+            "student_count": unassigned,
+        })
+    return entries
+
+
+def _topic_statistics_list(group_id=None):
     """Build per-topic statistics."""
     topics = db_session.query(Topic).all()
     result = []
@@ -42,10 +96,17 @@ def _topic_statistics_list():
             })
             continue
 
-        answers = db_session.query(Answer).filter(
+        answers = db_session.query(Answer).join(Submission).filter(
             Answer.question_id.in_(question_ids),
             Answer.score.isnot(None),
-        ).all()
+        )
+        student_ids = _student_ids_for_group(group_id)
+        if student_ids is not None:
+            if not student_ids:
+                answers = answers.filter(Submission.user_id == -1)
+            else:
+                answers = answers.filter(Submission.user_id.in_(student_ids))
+        answers = answers.all()
 
         submission_count = len({a.submission_id for a in answers})
         if answers:
@@ -73,12 +134,10 @@ def _topic_statistics_list():
     return result
 
 
-def _test_summary(test):
+def _test_summary(test, group_id=None):
     """Summary stats for one test."""
-    submissions = db_session.query(Submission).filter_by(test_id=test.id).all()
-    grades = db_session.query(Grade).join(Submission).filter(
-        Submission.test_id == test.id
-    ).all()
+    submissions = _submissions_for_test(test.id, group_id)
+    grades = _grades_for_test(test.id, group_id)
 
     avg_percentage = 0
     avg_score = 0
@@ -127,7 +186,7 @@ def _score_distribution(grades):
     return [{"label": label, "count": counts[label]} for label, _, _ in buckets]
 
 
-def _question_stats_for_test(test_id):
+def _question_stats_for_test(test_id, group_id=None):
     """Per-question averages for a test."""
     test_questions = db_session.query(TestQuestion).filter_by(
         test_id=test_id
@@ -141,7 +200,14 @@ def _question_stats_for_test(test_id):
             Submission.test_id == test_id,
             Answer.question_id == question.id,
             Answer.score.isnot(None),
-        ).all()
+        )
+        student_ids = _student_ids_for_group(group_id)
+        if student_ids is not None:
+            if not student_ids:
+                answers = answers.filter(Submission.user_id == -1)
+            else:
+                answers = answers.filter(Submission.user_id.in_(student_ids))
+        answers = answers.all()
 
         if answers:
             avg_score_q = sum(a.score for a in answers) / len(answers)
@@ -173,18 +239,32 @@ def get_overview():
         return error_response, status
 
     focus_test_id = request.args.get('test_id', type=int)
+    group_id = _parse_group_id_param()
 
-    total_students = db_session.query(func.count()).select_from(
-        db_session.query(User).filter_by(role='student').subquery()
-    ).scalar()
+    student_query = db_session.query(User).filter_by(role=ROLE_STUDENT)
+    student_ids = _student_ids_for_group(group_id)
+    if student_ids is not None:
+        total_students = len(student_ids)
+    else:
+        total_students = student_query.count()
 
     total_tests = db_session.query(func.count(Test.id)).scalar()
     total_questions = db_session.query(func.count(Question.id)).scalar()
-    total_submissions = db_session.query(func.count(Submission.id)).scalar()
-    total_graded = db_session.query(func.count(Grade.id)).scalar()
+    total_submissions = db_session.query(func.count(Submission.id))
+    total_graded = db_session.query(func.count(Grade.id)).join(Submission)
+    if student_ids is not None:
+        if not student_ids:
+            total_submissions = 0
+            total_graded = 0
+        else:
+            total_submissions = total_submissions.filter(Submission.user_id.in_(student_ids)).scalar()
+            total_graded = total_graded.filter(Submission.user_id.in_(student_ids)).scalar()
+    else:
+        total_submissions = total_submissions.scalar()
+        total_graded = total_graded.scalar()
 
     tests = db_session.query(Test).order_by(Test.created_at.desc()).all()
-    tests_summary = [_test_summary(t) for t in tests]
+    tests_summary = [_test_summary(t, group_id) for t in tests]
 
     latest_test_id = None
     for summary in tests_summary:
@@ -203,12 +283,10 @@ def get_overview():
         test = db_session.query(Test).filter_by(id=focus_test_id).first()
         if test:
             focus_test_name = test.name
-            grades = db_session.query(Grade).join(Submission).filter(
-                Submission.test_id == focus_test_id
-            ).all()
+            grades = _grades_for_test(focus_test_id, group_id)
             focus_distribution = _score_distribution(grades)
 
-    topics = _topic_statistics_list()
+    topics = _topic_statistics_list(group_id)
     weak_topics = sorted(
         [t for t in topics if t['submission_count'] > 0],
         key=lambda t: t['average_percentage'],
@@ -226,6 +304,92 @@ def get_overview():
         "focus_test_name": focus_test_name,
         "focus_distribution": focus_distribution,
         "weak_topics": weak_topics,
+        "group_id": group_id,
+    }), 200
+
+
+@bp.route('/groups/compare', methods=['GET'])
+def compare_groups():
+    """Compare average scores across groups (includes Unassigned)."""
+    user, error_response, status = require_lecturer()
+    if error_response:
+        return error_response, status
+
+    focus_test_id = request.args.get('test_id', type=int)
+    group_entries = _group_entries_for_compare()
+    tests = db_session.query(Test).order_by(Test.created_at.desc()).all()
+
+    matrix = []
+    chart_by_test = []
+    all_pcts_by_group = {}
+
+    for entry in group_entries:
+        gid = entry["group_id"]
+        row_tests = {}
+        row_pcts = []
+        for test in tests:
+            grades = _grades_for_test(test.id, gid)
+            if grades:
+                avg = round(sum(g.percentage for g in grades) / len(grades), 2)
+                row_tests[str(test.id)] = {
+                    "test_id": test.id,
+                    "test_name": test.name,
+                    "average_percentage": avg,
+                    "graded_count": len(grades),
+                }
+                row_pcts.extend(g.percentage for g in grades)
+            else:
+                row_tests[str(test.id)] = {
+                    "test_id": test.id,
+                    "test_name": test.name,
+                    "average_percentage": None,
+                    "graded_count": 0,
+                }
+        matrix.append({
+            **entry,
+            "tests": row_tests,
+            "overall_average": round(sum(row_pcts) / len(row_pcts), 2) if row_pcts else None,
+        })
+        all_pcts_by_group[str(gid)] = row_pcts
+
+    for test in tests:
+        groups_data = []
+        for entry in group_entries:
+            gid = entry["group_id"]
+            grades = _grades_for_test(test.id, gid)
+            groups_data.append({
+                "group_id": gid,
+                "group_name": entry["group_name"],
+                "average_percentage": round(sum(g.percentage for g in grades) / len(grades), 2) if grades else None,
+                "graded_count": len(grades),
+            })
+        chart_by_test.append({
+            "test_id": test.id,
+            "test_name": test.name,
+            "groups": groups_data,
+        })
+
+    distributions = []
+    if focus_test_id:
+        test = db_session.query(Test).filter_by(id=focus_test_id).first()
+        if test:
+            for entry in group_entries:
+                gid = entry["group_id"]
+                grades = _grades_for_test(focus_test_id, gid)
+                distributions.append({
+                    "group_id": gid,
+                    "group_name": entry["group_name"],
+                    "distribution": _score_distribution(grades),
+                    "graded_count": len(grades),
+                })
+
+    return jsonify({
+        "focus_test_id": focus_test_id,
+        "tests": [{"test_id": t.id, "test_name": t.name} for t in tests],
+        "groups": group_entries,
+        "matrix": matrix,
+        "chart_by_test": chart_by_test,
+        "distributions": distributions,
     }), 200
 
 
@@ -236,7 +400,7 @@ def get_topic_statistics():
     if error_response:
         return error_response, status
 
-    return jsonify(_topic_statistics_list()), 200
+    return jsonify(_topic_statistics_list(_parse_group_id_param())), 200
 
 
 @bp.route('/tests', methods=['GET'])
@@ -250,12 +414,13 @@ def list_test_statistics():
     mode = (request.args.get('mode') or '').strip()
     status_filter = (request.args.get('status') or 'all').strip()
     sort = (request.args.get('sort') or 'date').strip()
+    group_id = _parse_group_id_param()
 
     tests = db_session.query(Test).all()
     result = []
 
     for test in tests:
-        summary = _test_summary(test)
+        summary = _test_summary(test, group_id)
 
         if q and q not in test.name.lower():
             continue
@@ -288,10 +453,14 @@ def get_student_statistics():
         return error_response, status
 
     q = (request.args.get('q') or '').strip().lower()
+    group_id = _parse_group_id_param()
     students = db_session.query(User).filter_by(role='student').order_by(User.username).all()
+    student_ids = _student_ids_for_group(group_id)
 
     result = []
     for student in students:
+        if student_ids is not None and student.id not in student_ids:
+            continue
         if q:
             haystack = f"{student.username} {student.student_id or ''}".lower()
             if q not in haystack:
@@ -314,6 +483,8 @@ def get_student_statistics():
             "student_id": student.id,
             "username": student.username,
             "student_id_number": student.student_id,
+            "group_id": student.group_id,
+            "group_name": student.group.name if student.group else "Unassigned",
             "total_submissions": submissions,
             "total_tests_graded": total_tests_graded,
             "average_percentage": round(avg_percentage, 2),
@@ -448,10 +619,9 @@ def get_test_statistics(test_id):
     if not test:
         return jsonify({"error": "Test not found"}), 404
 
-    submissions = db_session.query(Submission).filter_by(test_id=test_id).all()
-    grades = db_session.query(Grade).join(Submission).filter(
-        Submission.test_id == test_id
-    ).all()
+    group_id = _parse_group_id_param()
+    submissions = _submissions_for_test(test_id, group_id)
+    grades = _grades_for_test(test_id, group_id)
     grade_by_sub = {g.submission_id: g for g in grades}
 
     if grades:
@@ -494,6 +664,7 @@ def get_test_statistics(test_id):
         "average_percentage": round(avg_percentage, 2),
         "max_score": max_score,
         "score_distribution": _score_distribution(grades),
-        "question_statistics": _question_stats_for_test(test_id),
+        "question_statistics": _question_stats_for_test(test_id, group_id),
         "student_results": student_results,
+        "group_id": group_id,
     }), 200

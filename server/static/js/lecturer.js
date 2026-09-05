@@ -4,15 +4,19 @@ const LecturerUI = {
     questions: [],
     tests: [],
     allQuestions: [],
+    groups: [],
     statsState: {
         view: 'overview',
         testId: null,
         studentId: null,
         focusTestId: null,
+        compareTestId: null,
+        groupFilter: '',
         testFilters: { q: '', mode: '', status: 'all', sort: 'date' },
         studentSearch: '',
     },
     _statsCharts: [],
+    GROUP_CHART_COLORS: ['#667eea', '#764ba2', '#20c997', '#f0ad4e', '#dc3545', '#6c757d', '#0dcaf0', '#fd7e14'],
 
     async api(method, endpoint, data) {
         const opts = { method, credentials: 'include', headers: {} };
@@ -83,7 +87,9 @@ const LecturerUI = {
         });
         document.querySelector('[data-bs-target="#gradingTab"]')?.addEventListener('shown.bs.tab', () => this.loadGrading());
         document.querySelector('[data-bs-target="#statisticsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStatistics());
+        document.querySelector('[data-bs-target="#groupsTab"]')?.addEventListener('shown.bs.tab', () => this.loadGroups());
         document.querySelector('[data-bs-target="#studentsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStudents());
+        await this.loadGroups();
     },
 
     // --- Topics ---
@@ -473,7 +479,52 @@ const LecturerUI = {
         if (opts.testId !== undefined) this.statsState.testId = opts.testId;
         if (opts.studentId !== undefined) this.statsState.studentId = opts.studentId;
         if (opts.focusTestId !== undefined) this.statsState.focusTestId = opts.focusTestId;
+        if (opts.compareTestId !== undefined) this.statsState.compareTestId = opts.compareTestId;
         this.loadStatistics();
+    },
+
+    statsGroupQuery(extra = {}) {
+        const params = new URLSearchParams();
+        if (this.statsState.groupFilter !== '' && this.statsState.groupFilter != null) {
+            params.set('group_id', this.statsState.groupFilter);
+        }
+        if (this.statsState.focusTestId && extra.includeFocusTest) {
+            params.set('test_id', this.statsState.focusTestId);
+        }
+        if (this.statsState.compareTestId && extra.includeCompareTest) {
+            params.set('test_id', this.statsState.compareTestId);
+        }
+        const qs = params.toString();
+        return qs ? `?${qs}` : '';
+    },
+
+    renderGroupFilterSelect() {
+        const sel = this.statsState.groupFilter ?? '';
+        return `<label class="form-label mb-0 small text-muted">Group</label>
+            <select class="form-select form-select-sm" style="width:auto;min-width:150px;" onchange="LecturerUI.statsState.groupFilter=this.value; LecturerUI.loadStatistics();">
+                <option value="" ${sel === '' ? 'selected' : ''}>All groups</option>
+                ${(this.groups || []).map(g => `<option value="${g.id}" ${String(sel) === String(g.id) ? 'selected' : ''}>${this.escapeHtml(g.name)}</option>`).join('')}
+            </select>`;
+    },
+
+    groupChartColor(index) {
+        return this.GROUP_CHART_COLORS[index % this.GROUP_CHART_COLORS.length];
+    },
+
+    populateGroupSelects(selectedId = '') {
+        const realGroups = (this.groups || []).filter(g => !g.is_virtual);
+        const opts = `<option value="">Unassigned</option>` +
+            realGroups.map(g => `<option value="${g.id}">${this.escapeHtml(g.name)}</option>`).join('');
+        const studentSel = document.getElementById('studentGroupSelect');
+        if (studentSel) {
+            studentSel.innerHTML = opts;
+            studentSel.value = selectedId == null ? '' : String(selectedId);
+        }
+        const filterSel = document.getElementById('studentGroupFilter');
+        if (filterSel) {
+            filterSel.innerHTML = `<option value="">All groups</option>` +
+                (this.groups || []).map(g => `<option value="${g.id}">${this.escapeHtml(g.name)}</option>`).join('');
+        }
     },
 
     renderStatsBreadcrumb(items) {
@@ -521,6 +572,7 @@ const LecturerUI = {
             else if (view === 'students') await this.renderStatsStudentList();
             else if (view === 'studentDetail') await this.renderStatsStudentDetail(this.statsState.studentId);
             else if (view === 'studentTestDetail') await this.renderStatsStudentTestDetail(this.statsState.studentId, this.statsState.testId);
+            else if (view === 'compareGroups') await this.renderStatsCompareGroups();
             else await this.renderStatsOverview();
         } catch (e) {
             el.innerHTML = `<div class="alert alert-danger">${this.escapeHtml(e.message)}</div>`;
@@ -528,16 +580,20 @@ const LecturerUI = {
     },
 
     async renderStatsOverview() {
-        const focusParam = this.statsState.focusTestId ? `?test_id=${this.statsState.focusTestId}` : '';
-        const data = await this.api('GET', `/api/v1/statistics/overview${focusParam}`);
+        const data = await this.api('GET', `/api/v1/statistics/overview${this.statsGroupQuery({ includeFocusTest: true })}`);
+        if (!this.statsState.focusTestId && data.focus_test_id) {
+            this.statsState.focusTestId = data.focus_test_id;
+        }
 
         this.renderStatsBreadcrumb([{ label: 'Class overview', action: "statsNav('overview')" }]);
         this.renderStatsToolbar(`
+            ${this.renderGroupFilterSelect()}
             <label class="form-label mb-0 small text-muted">Focus test</label>
             <select class="form-select form-select-sm" style="width:auto;min-width:200px;" onchange="LecturerUI.statsState.focusTestId=parseInt(this.value)||null; LecturerUI.loadStatistics();">
                 <option value="">Latest with grades</option>
                 ${(data.tests_summary || []).map(t => `<option value="${t.test_id}" ${data.focus_test_id===t.test_id?'selected':''}>${this.escapeHtml(t.test_name)}</option>`).join('')}
             </select>
+            <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('compareGroups')"><i class="fas fa-layer-group me-1"></i>Compare groups</button>
             <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('tests')"><i class="fas fa-list me-1"></i>Browse tests</button>
             <button class="btn btn-outline-primary btn-sm" onclick="LecturerUI.statsNav('students')"><i class="fas fa-users me-1"></i>Browse students</button>
         `);
@@ -646,6 +702,9 @@ const LecturerUI = {
         if (f.mode) params.set('mode', f.mode);
         if (f.status && f.status !== 'all') params.set('status', f.status);
         if (f.sort) params.set('sort', f.sort);
+        if (this.statsState.groupFilter !== '' && this.statsState.groupFilter != null) {
+            params.set('group_id', this.statsState.groupFilter);
+        }
         const data = await this.api('GET', `/api/v1/statistics/tests?${params}`);
 
         this.renderStatsBreadcrumb([
@@ -653,6 +712,7 @@ const LecturerUI = {
             { label: 'Tests', action: "statsNav('tests')" },
         ]);
         this.renderStatsToolbar(`
+            ${this.renderGroupFilterSelect()}
             <input type="search" class="form-control form-control-sm" style="width:200px;" placeholder="Search tests…"
                 value="${this.escapeHtml(f.q)}" oninput="LecturerUI.statsState.testFilters.q=this.value; clearTimeout(LecturerUI._statsSearchTimer); LecturerUI._statsSearchTimer=setTimeout(()=>LecturerUI.loadStatistics(),300);">
             <select class="form-select form-select-sm" onchange="LecturerUI.statsState.testFilters.mode=this.value; LecturerUI.loadStatistics();">
@@ -691,7 +751,7 @@ const LecturerUI = {
 
     async renderStatsTestDetail(testId) {
         if (!testId) { this.statsNav('tests'); return; }
-        const data = await this.api('GET', `/api/v1/statistics/tests/${testId}`);
+        const data = await this.api('GET', `/api/v1/statistics/tests/${testId}${this.statsGroupQuery()}`);
 
         this.renderStatsBreadcrumb([
             { label: 'Class overview', action: "statsNav('overview')" },
@@ -699,6 +759,7 @@ const LecturerUI = {
             { label: data.test_name, action: `statsNav('testDetail',{testId:${testId}})` },
         ]);
         this.renderStatsToolbar(`
+            ${this.renderGroupFilterSelect()}
             <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.statsNav('tests')"><i class="fas fa-arrow-left me-1"></i>Back to tests</button>
         `);
 
@@ -763,14 +824,20 @@ const LecturerUI = {
 
     async renderStatsStudentList() {
         const q = this.statsState.studentSearch;
-        const params = q ? `?q=${encodeURIComponent(q)}` : '';
-        const data = await this.api('GET', `/api/v1/statistics/students${params}`);
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (this.statsState.groupFilter !== '' && this.statsState.groupFilter != null) {
+            params.set('group_id', this.statsState.groupFilter);
+        }
+        const qs = params.toString();
+        const data = await this.api('GET', `/api/v1/statistics/students${qs ? `?${qs}` : ''}`);
 
         this.renderStatsBreadcrumb([
             { label: 'Class overview', action: "statsNav('overview')" },
             { label: 'Students', action: "statsNav('students')" },
         ]);
         this.renderStatsToolbar(`
+            ${this.renderGroupFilterSelect()}
             <input type="search" class="form-control form-control-sm" style="width:220px;" placeholder="Search name or ID…"
                 value="${this.escapeHtml(q)}" oninput="LecturerUI.statsState.studentSearch=this.value; clearTimeout(LecturerUI._statsStudentTimer); LecturerUI._statsStudentTimer=setTimeout(()=>LecturerUI.loadStatistics(),300);">
         `);
@@ -778,9 +845,10 @@ const LecturerUI = {
         document.getElementById('statisticsContent').innerHTML = `
             <div class="card p-3">
                 <h6 class="mb-3">${data.length} student${data.length !== 1 ? 's' : ''}</h6>
-                ${this.tableHtml(['Student', 'Submissions', 'Graded', 'Avg %', ''],
+                ${this.tableHtml(['Student', 'Group', 'Submissions', 'Graded', 'Avg %', ''],
                     data.map(s => `<tr class="stats-clickable-row" onclick="LecturerUI.statsNav('studentDetail',{studentId:${s.student_id}})">
                         <td><strong>${this.escapeHtml(s.username)}</strong>${s.student_id_number ? `<br><small class="text-muted">${this.escapeHtml(s.student_id_number)}</small>` : ''}</td>
+                        <td>${this.escapeHtml(s.group_name || 'Unassigned')}</td>
                         <td>${s.total_submissions}</td>
                         <td>${s.total_tests_graded}</td>
                         <td>${s.total_tests_graded ? this.pctBadge(s.average_percentage) : '—'}</td>
@@ -900,36 +968,253 @@ const LecturerUI = {
         }
     },
 
+    async renderStatsCompareGroups() {
+        if (this.statsState.compareTestId == null) {
+            this.statsState.compareTestId = this.statsState.focusTestId || '';
+        }
+        const data = await this.api('GET', `/api/v1/statistics/groups/compare${this.statsGroupQuery({ includeCompareTest: true })}`);
+
+        this.renderStatsBreadcrumb([
+            { label: 'Class overview', action: "statsNav('overview')" },
+            { label: 'Compare groups', action: "statsNav('compareGroups')" },
+        ]);
+        this.renderStatsToolbar(`
+            <label class="form-label mb-0 small text-muted">Distribution test</label>
+            <select class="form-select form-select-sm" style="width:auto;min-width:200px;" onchange="LecturerUI.statsState.compareTestId=parseInt(this.value)||''; LecturerUI.loadStatistics();">
+                <option value="">All tests (matrix only)</option>
+                ${(data.tests || []).map(t => `<option value="${t.test_id}" ${String(this.statsState.compareTestId)===String(t.test_id)?'selected':''}>${this.escapeHtml(t.test_name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.statsNav('overview')"><i class="fas fa-arrow-left me-1"></i>Back to overview</button>
+        `);
+
+        const tests = data.tests || [];
+        const matrix = data.matrix || [];
+        const matrixHeaders = ['Group', 'Students', ...tests.map(t => this.escapeHtml(t.test_name)), 'Overall avg'];
+        const matrixRows = matrix.map(row => `<tr>
+            <td><strong>${this.escapeHtml(row.group_name)}</strong></td>
+            <td>${row.student_count}</td>
+            ${tests.map(t => {
+                const cell = row.tests[String(t.test_id)] || {};
+                const avg = cell.average_percentage;
+                const n = cell.graded_count || 0;
+                return `<td>${avg != null ? `${this.pctBadge(avg)}<br><small class="text-muted">n=${n}</small>` : '—'}</td>`;
+            }).join('')}
+            <td>${row.overall_average != null ? this.pctBadge(row.overall_average) : '—'}</td>
+        </tr>`);
+
+        const el = document.getElementById('statisticsContent');
+        el.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-12 mb-3">
+                    <div class="card p-3">
+                        <h6 class="mb-3">Average score by group (per test)</h6>
+                        <div class="stats-chart-wrap" style="height:320px"><canvas id="chartGroupCompare"></canvas></div>
+                    </div>
+                </div>
+            </div>
+            ${(data.distributions || []).some(d => (d.distribution || []).some(x => x.count > 0)) ? `
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card p-3">
+                        <h6 class="mb-3">Score distribution by group${this.statsState.compareTestId ? '' : ' (select a test above)'}</h6>
+                        <div class="stats-chart-wrap" style="height:300px"><canvas id="chartGroupDist"></canvas></div>
+                    </div>
+                </div>
+            </div>` : ''}
+            <div class="card p-3">
+                <h6 class="mb-3">Summary matrix</h6>
+                ${this.tableHtml(matrixHeaders, matrixRows)}
+            </div>`;
+
+        const chartTests = (data.chart_by_test || []).filter(ct =>
+            ct.groups.some(g => g.average_percentage != null)
+        );
+        if (chartTests.length && matrix.length) {
+            const labels = chartTests.map(ct => ct.test_name.length > 16 ? ct.test_name.slice(0, 14) + '…' : ct.test_name);
+            const datasets = matrix.map((row, gi) => ({
+                label: row.group_name,
+                data: chartTests.map(ct => {
+                    const g = ct.groups.find(x => x.group_id === row.group_id);
+                    return g?.average_percentage ?? null;
+                }),
+                backgroundColor: this.groupChartColor(gi),
+            }));
+            this.mountChart('chartGroupCompare', {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Avg %' } } },
+                },
+            });
+        }
+
+        const dist = data.distributions || [];
+        if (dist.length && dist.some(d => d.distribution.some(x => x.count > 0))) {
+            const bucketLabels = dist[0].distribution.map(d => d.label);
+            this.mountChart('chartGroupDist', {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: dist.map((d, i) => ({
+                        label: d.group_name,
+                        data: d.distribution.map(x => x.count),
+                        backgroundColor: this.groupChartColor(i),
+                    })),
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                },
+            });
+        }
+    },
+
+    // --- Groups ---
+    async loadGroups() {
+        this.groups = await this.api('GET', '/api/v1/groups');
+        this.populateGroupSelects();
+        const rows = (this.groups || []).map(g => `<tr class="${g.is_virtual ? '' : 'stats-clickable-row'}" ${g.is_virtual ? '' : `onclick="LecturerUI.viewGroupDetail(${g.id})"`}>
+            <td><strong>${this.escapeHtml(g.name)}</strong>${g.is_virtual ? ' <span class="badge bg-secondary">virtual</span>' : ''}</td>
+            <td>${g.student_count ?? 0}</td>
+            <td>${g.average_percentage != null ? this.pctBadge(g.average_percentage) : '—'}</td>
+            <td onclick="event.stopPropagation()">${g.is_virtual ? `<button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.filterStudentsByGroup(0)">View students</button>` :
+                `<button class="btn btn-sm btn-outline-primary me-1" onclick="LecturerUI.viewGroupDetail(${g.id})">View</button>
+                 <button class="btn btn-sm btn-outline-secondary me-1" onclick="LecturerUI.showGroupModal(${g.id})">Edit</button>
+                 <button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteGroup(${g.id})">Delete</button>`}
+            </td>
+        </tr>`);
+        document.getElementById('groupsTable').innerHTML = this.tableHtml(
+            ['Group', 'Students', 'Avg graded %', 'Actions'], rows
+        );
+    },
+
+    async viewGroupDetail(groupId) {
+        const data = await this.api('GET', `/api/v1/groups/${groupId}`);
+        const rows = (data.students || []).map(s => `<tr>
+            <td>${this.escapeHtml(s.username)}</td>
+            <td>${this.escapeHtml(s.student_id || '—')}</td>
+            <td><button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.statsNav('studentDetail',{studentId:${s.id}}); document.querySelector('[data-bs-target=\\'#statisticsTab\\']').click();">Statistics</button></td>
+        </tr>`);
+        document.getElementById('groupsTable').innerHTML = `
+            <div class="mb-3">
+                <button class="btn btn-outline-secondary btn-sm" onclick="LecturerUI.loadGroups()"><i class="fas fa-arrow-left me-1"></i>Back to groups</button>
+                <button class="btn btn-outline-primary btn-sm ms-2" onclick="LecturerUI.statsState.groupFilter='${groupId}'; LecturerUI.statsNav('overview'); document.querySelector('[data-bs-target=\\'#statisticsTab\\']').click();">Group statistics</button>
+            </div>
+            <div class="card p-3 mb-3">
+                <h5 class="mb-1">${this.escapeHtml(data.name)}</h5>
+                <p class="text-muted mb-0">${data.student_count} students · ${data.average_percentage != null ? `Avg ${data.average_percentage}%` : 'No grades yet'}</p>
+            </div>
+            ${this.tableHtml(['Username', 'Student ID', 'Actions'], rows)}`;
+    },
+
+    filterStudentsByGroup(groupId) {
+        document.getElementById('studentGroupFilter').value = String(groupId);
+        document.querySelector('[data-bs-target="#studentsTab"]').click();
+        this.loadStudents();
+    },
+
+    showGroupModal(id) {
+        document.getElementById('groupEditId').value = id || '';
+        document.getElementById('groupModalTitle').textContent = id ? 'Edit Group' : 'Create Group';
+        if (id) {
+            const g = (this.groups || []).find(x => x.id === id);
+            document.getElementById('groupName').value = g?.name || '';
+            document.getElementById('groupDescription').value = g?.description || '';
+        } else {
+            document.getElementById('groupName').value = '';
+            document.getElementById('groupDescription').value = '';
+        }
+        new bootstrap.Modal(document.getElementById('groupModal')).show();
+    },
+
+    async saveGroup() {
+        const id = document.getElementById('groupEditId').value;
+        const name = document.getElementById('groupName').value.trim();
+        const description = document.getElementById('groupDescription').value.trim();
+        if (!name) return alert('Group name required');
+        try {
+            if (id) {
+                await this.api('PUT', `/api/v1/groups/${id}`, { name, description });
+            } else {
+                await this.api('POST', '/api/v1/groups', { name, description });
+            }
+            bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+            await this.loadGroups();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
+    async deleteGroup(id) {
+        if (!confirm('Delete this group? Students will move to Unassigned.')) return;
+        try {
+            await this.api('DELETE', `/api/v1/groups/${id}`);
+            await this.loadGroups();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
     // --- Students ---
     async loadStudents() {
-        const students = await this.api('GET', '/api/v1/students');
+        const groupFilter = document.getElementById('studentGroupFilter')?.value ?? '';
+        const params = groupFilter !== '' ? `?group_id=${encodeURIComponent(groupFilter)}` : '';
+        const students = await this.api('GET', `/api/v1/students${params}`);
         const rows = students.map(s => `<tr>
             <td>${s.id}</td>
             <td>${this.escapeHtml(s.username)}</td>
             <td>${this.escapeHtml(s.student_id || '-')}</td>
-            <td><button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteStudent(${s.id})">Delete</button></td>
+            <td>${this.escapeHtml(s.group_name || 'Unassigned')}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-secondary me-1" onclick="LecturerUI.showStudentModal(${s.id})">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteStudent(${s.id})">Delete</button>
+            </td>
         </tr>`);
         document.getElementById('studentsTable').innerHTML = this.tableHtml(
-            ['ID', 'Username', 'Student ID', 'Actions'], rows
+            ['ID', 'Username', 'Student ID', 'Group', 'Actions'], rows
         );
     },
 
-    showStudentModal() {
-        document.getElementById('studentUsername').value = '';
-        document.getElementById('studentPassword').value = '';
-        document.getElementById('studentIdField').value = '';
+    async showStudentModal(id) {
+        document.getElementById('studentEditId').value = id || '';
+        document.getElementById('studentModalTitle').textContent = id ? 'Edit Student' : 'Add Student';
+        document.getElementById('studentPasswordHint').textContent = id ? 'Leave blank to keep current password' : '';
+        document.getElementById('studentPassword').required = !id;
+        if (id) {
+            const s = await this.api('GET', `/api/v1/students/${id}`);
+            document.getElementById('studentUsername').value = s.username;
+            document.getElementById('studentPassword').value = '';
+            document.getElementById('studentIdField').value = s.student_id || '';
+            this.populateGroupSelects(s.group_id ?? '');
+        } else {
+            document.getElementById('studentUsername').value = '';
+            document.getElementById('studentPassword').value = '';
+            document.getElementById('studentIdField').value = '';
+            this.populateGroupSelects('');
+        }
         new bootstrap.Modal(document.getElementById('studentModal')).show();
     },
 
     async saveStudent() {
+        const id = document.getElementById('studentEditId').value;
         const username = document.getElementById('studentUsername').value.trim();
         const password = document.getElementById('studentPassword').value;
         const student_id = document.getElementById('studentIdField').value.trim() || null;
-        if (!username || !password) return alert('Username and password required');
+        const groupRaw = document.getElementById('studentGroupSelect').value;
+        const group_id = groupRaw === '' ? 0 : parseInt(groupRaw, 10);
+        if (!username) return alert('Username required');
+        if (!id && !password) return alert('Password required');
         try {
-            await this.api('POST', '/api/v1/students', { username, password, student_id });
+            const payload = { username, student_id, group_id };
+            if (password) payload.password = password;
+            if (id) {
+                await this.api('PUT', `/api/v1/students/${id}`, payload);
+            } else {
+                payload.password = password;
+                await this.api('POST', '/api/v1/students', payload);
+            }
             bootstrap.Modal.getInstance(document.getElementById('studentModal')).hide();
             await this.loadStudents();
+            await this.loadGroups();
         } catch (e) { alert('Error: ' + e.message); }
     },
 
