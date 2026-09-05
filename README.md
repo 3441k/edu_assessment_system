@@ -12,6 +12,7 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 - **Scheduled Tests**: Set availability windows and optional per-student duration; auto-submit when time expires
 - **Live Tests**: Lecturer-controlled sessions with Go Live, Extend, and End; global deadline and auto-submit for all students
 - **Auto & Manual Grading**: Automatic code execution with test cases, manual grading for all question types
+- **Student Results**: Graded submissions show scores and feedback on the dashboard; available after the test window closes for scheduled tests
 - **Statistics & Analytics**: Topic-wise performance tracking, student progress, class-wide statistics
 - **Export**: CSV grades export and PDF report generation
 

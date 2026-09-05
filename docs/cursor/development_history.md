@@ -245,6 +245,7 @@
 - [x] Composite question types and student test navigation UI
 - [x] Auto-submit on timeout (idempotent submit endpoint)
 - [x] Grading score validation with clear error messages
+- [x] Student results viewing for graded scheduled and live tests
 
 ### Known Limitations
 - Code execution sandbox could be more secure

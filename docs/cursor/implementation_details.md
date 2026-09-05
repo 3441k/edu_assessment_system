@@ -35,7 +35,7 @@ For combined multiple choice + text on one question, the student's `answer_text`
 - `PUT /<id>` - Update test (lecturer only)
 - `DELETE /<id>` - Delete test (lecturer only)
 
-Test payloads include `test_mode` (`scheduled` or `live`), `time_limit`, `attempts_allowed`, `available_from`, and `available_until`. List/detail responses also include timing fields (`availability_status`, `live_status`, `seconds_remaining`, etc.) computed by `server/services/test_schedule.py`.
+Test payloads include `test_mode` (`scheduled` or `live`), `time_limit`, `attempts_allowed`, `available_from`, and `available_until`. List/detail responses also include timing fields (`availability_status`, `live_status`, `seconds_remaining`, etc.) computed by `server/services/test_schedule.py`. Student list responses add `can_view_results` and `results_ready` so graded results stay accessible after scheduled windows close.
 
 ### Live Sessions (`/api/v1/tests/<id>/live`)
 Implemented in `server/routes/live.py`. Only applies to tests with `test_mode=live`.
@@ -53,6 +53,8 @@ When a live session ends (naturally, by extend/end, or on expiry), all in-progre
 - `POST /` - Create new submission (blocked if test unavailable or live session not active)
 - `POST /<id>/answers` - Save answer for a question
 - `POST /<id>/submit` - Submit test
+
+For students, `GET /<id>` on a submitted or graded submission returns a results payload: `grade`, `questions` (with content, answers, scores, feedback), `results_ready`, and `can_view_results`. Students do not use the lecturer grading API to view their own results.
 
 Submission endpoints call `auto_submit_if_expired()` from `test_schedule.py` to finalize timed-out in-progress submissions before serving or mutating data. The submit endpoint is idempotent: if a submission was already auto-submitted, it returns 200 instead of an error.
 
@@ -83,11 +85,13 @@ Submission endpoints call `auto_submit_if_expired()` from `test_schedule.py` to 
 | `GET /logout` | Logout and redirect to student login |
 | `GET /dashboard` | Student test dashboard (student role required) |
 | `GET /test/<test_id>` | Test taking page (student role required) |
-| `GET /results/<submission_id>` | View graded results (student role required) |
+| `GET /results/<submission_id>` | View graded results (student role required) — loads from `/api/v1/submissions/<id>` |
 
 Implemented in `server/routes/web.py`. Uses `require_student()` to block lecturers.
 
 **Test taking UI** (`server/templates/test_taking.html`): one question at a time, Previous/Next buttons, numbered sidebar, progress bar, auto-save, Submit only on the last question. Code editor lazy-inits when shown; diagram canvas is full-width with correct drawing coordinates.
+
+**Results UI** (`server/templates/results.html`): shows final grade and per-question scores/feedback after lecturer finalizes grading. The student dashboard always offers **View Results** for graded submissions, including scheduled tests whose availability window has closed (`can_view_results` / `results_ready` from the tests list API).
 
 ### Lecturer Web (`/lecturer`)
 

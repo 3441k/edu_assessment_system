@@ -18,94 +18,132 @@
 </div>
 
 <script>
-const submissionId = {{ submission_id }};
+const submissionId = {{ submission_id|tojson }};
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function parseTextAnswerParts(answerText, types) {
+    const result = { multiple_choice: '', text: '' };
+    if (!answerText) return result;
+    if (types.includes('multiple_choice') && types.includes('text')) {
+        try {
+            const parsed = JSON.parse(answerText);
+            result.multiple_choice = parsed.multiple_choice || '';
+            result.text = parsed.text || '';
+            return result;
+        } catch {
+            result.text = answerText;
+            return result;
+        }
+    }
+    if (types.includes('multiple_choice')) result.multiple_choice = answerText;
+    if (types.includes('text')) result.text = answerText;
+    return result;
+}
+
+function renderAnswerSections(q) {
+    const ans = q.answer || {};
+    const types = q.answer_types && q.answer_types.length ? q.answer_types : [q.type];
+    const textParts = parseTextAnswerParts(ans.answer_text, types);
+    const sections = [];
+
+    if (types.includes('multiple_choice')) {
+        sections.push(`<div class="mb-2"><strong>Multiple choice:</strong> ${escapeHtml(textParts.multiple_choice || '(no answer)')}</div>`);
+    }
+    if (types.includes('text')) {
+        sections.push(`<div class="mb-2"><strong>Written answer:</strong><p class="mb-0">${escapeHtml(textParts.text || '(no answer)')}</p></div>`);
+    }
+    if (types.includes('code')) {
+        sections.push(`<div class="mb-2"><strong>Code:</strong><pre class="bg-light p-3 rounded mb-0"><code>${escapeHtml(ans.code || '(no answer)')}</code></pre></div>`);
+    }
+    if (types.includes('diagram')) {
+        sections.push(`<div class="mb-2"><strong>Diagram:</strong> ${
+            ans.diagram_data
+                ? `<img src="${ans.diagram_data}" class="img-fluid border rounded mt-1" style="max-height:300px">`
+                : '<span class="text-muted">(no diagram submitted)</span>'
+        }</div>`);
+    }
+
+    return sections.join('') || '<p class="text-muted mb-0">(no answer)</p>';
+}
 
 async function loadResults() {
     try {
         const response = await fetch(`/api/v1/submissions/${submissionId}`, {
             credentials: 'include'
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to load results');
         }
-        
+
         const submission = await response.json();
-        
-        // Get grade if available
-        let grade = null;
-        if (submission.status === 'graded') {
-            const gradeResponse = await fetch(`/api/v1/grading/submissions/${submissionId}`, {
-                credentials: 'include'
-            });
-            if (gradeResponse.ok) {
-                grade = await gradeResponse.json();
-            }
-        }
-        
-        renderResults(submission, grade);
-        
+        renderResults(submission);
+
     } catch (error) {
         console.error('Error loading results:', error);
-        document.getElementById('resultsContainer').innerHTML = 
+        document.getElementById('resultsContainer').innerHTML =
             '<div class="alert alert-danger">Error loading results.</div>';
     }
 }
 
-function renderResults(submission, grade) {
+function renderResults(submission) {
     const container = document.getElementById('resultsContainer');
-    
+
+    if (!submission.can_view_results) {
+        container.innerHTML = '<div class="alert alert-warning">Results are not available for this test yet.</div>';
+        return;
+    }
+
     let gradeHtml = '';
-    if (grade) {
+    if (submission.results_ready && submission.grade) {
         gradeHtml = `
             <div class="card mb-4">
                 <div class="card-body">
-                    <h4>Final Grade</h4>
-                    <h2 class="text-primary">${grade.total_score} / ${grade.max_score} (${grade.percentage.toFixed(1)}%)</h2>
+                    <h4>${escapeHtml(submission.test_name || 'Test')} — Final Grade</h4>
+                    <h2 class="text-primary mb-0">${submission.grade.total_score} / ${submission.grade.max_score} (${submission.grade.percentage.toFixed(1)}%)</h2>
                 </div>
             </div>
         `;
     } else {
-        gradeHtml = '<div class="alert alert-info">Results are being graded. Please check back later.</div>';
+        gradeHtml = '<div class="alert alert-info">Your submission has been received. Results will appear here once grading is complete.</div>';
     }
-    
-    let answersHtml = '';
-    if (submission.answers && submission.answers.length > 0) {
-        answersHtml = submission.answers.map((answer, index) => {
-            let answerContent = '';
-            
-            if (answer.code) {
-                answerContent = `<pre><code>${escapeHtml(answer.code)}</code></pre>`;
-            } else if (answer.diagram_data) {
-                answerContent = `<img src="${answer.diagram_data}" class="img-fluid" alt="Diagram">`;
-            } else if (answer.answer_text) {
-                answerContent = `<p>${escapeHtml(answer.answer_text)}</p>`;
-            }
-            
-            return `
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5>Question ${index + 1}</h5>
-                        ${answerContent}
-                        ${answer.score !== null ? `<p><strong>Score:</strong> ${answer.score}</p>` : ''}
-                        ${answer.feedback ? `<p><strong>Feedback:</strong> ${escapeHtml(answer.feedback)}</p>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    container.innerHTML = gradeHtml + answersHtml + 
-        '<div class="mt-4"><a href="/dashboard" class="btn btn-primary">Back to Dashboard</a></div>';
-}
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    const questions = submission.questions || [];
+    const questionsHtml = questions.map((q, index) => {
+        const ans = q.answer || {};
+        const scoreHtml = ans.score != null
+            ? `<p class="mb-1"><strong>Score:</strong> ${ans.score} / ${q.max_points}</p>`
+            : (submission.results_ready ? '<p class="mb-1 text-muted">Not scored yet</p>' : '');
+        const feedbackHtml = ans.feedback
+            ? `<p class="mb-0"><strong>Feedback:</strong> ${escapeHtml(ans.feedback)}</p>`
+            : '';
+
+        return `
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between">
+                    <span>Question ${index + 1}${q.type_label ? ` (${escapeHtml(q.type_label)})` : ''}</span>
+                    <span class="text-muted">${q.max_points} pts max</span>
+                </div>
+                <div class="card-body">
+                    <p><strong>${escapeHtml(q.content)}</strong></p>
+                    <h6>Your answer</h6>
+                    ${renderAnswerSections(q)}
+                    ${submission.results_ready ? `<div class="mt-3 border-top pt-3">${scoreHtml}${feedbackHtml}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = gradeHtml + questionsHtml +
+        '<div class="mt-4"><a href="/dashboard" class="btn btn-primary">Back to Dashboard</a></div>';
 }
 
 loadResults();
 </script>
 {% endblock %}
-

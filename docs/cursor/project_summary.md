@@ -101,6 +101,11 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 - [x] Idempotent auto-submit on timeout; grading score validation and error messages
 - [x] Placeholder answer rows for unanswered questions during grading
 
+### Phase 7: Student Results Access
+- [x] Student-accessible results via submission API (grade, questions, scores, feedback)
+- [x] Results page no longer depends on lecturer-only grading API
+- [x] Dashboard shows View Results for graded tests after scheduled windows close
+
 ## File Structure
 
 ```

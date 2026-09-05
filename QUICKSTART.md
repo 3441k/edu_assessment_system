@@ -125,7 +125,7 @@ Live controls (Go Live / Extend / End) are available in the **lecturer web dashb
 2. **View Tests**: See available tests and their status (open, upcoming, waiting for lecturer, live, closed)
 3. **Take Test**: One question is shown at a time; use **Previous** / **Next** or the numbered sidebar to navigate; progress auto-saves
 4. **Submit**: Use **Submit Test** on the last question, or the test auto-submits when time expires
-5. **View Results**: See grades and feedback after grading
+5. **View Results**: After grading is finalized, open **View Results** from the dashboard (available even after a scheduled test window closes)
 
 For **live** tests, the dashboard shows "Waiting for lecturer" until the session starts, then displays a shared countdown timer during the session.
 

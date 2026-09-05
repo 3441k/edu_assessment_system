@@ -2,18 +2,69 @@
 
 from flask import Blueprint, request, jsonify, session
 from server.database import db_session
-from server.models import Submission, Answer, Test, Question, TestQuestion
+from server.models import Submission, Answer, Test, Question, TestQuestion, Grade
+from shared.question_utils import get_answer_types, format_type_label
 from server.services.test_schedule import (
     auto_submit_if_expired, can_start_test, submission_timing_info
 )
 from server.services.live_session import get_active_live_session
-from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, TEST_MODE_LIVE
+from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED, TEST_MODE_LIVE
 from datetime import datetime
 
 bp = Blueprint('submissions', __name__, url_prefix=API_SUBMISSIONS)
 
 
-def _submission_response(submission, include_answers=False):
+def _student_results_detail(submission):
+    """Build question-level results for a student submission."""
+    test_questions = db_session.query(TestQuestion).filter_by(
+        test_id=submission.test_id
+    ).order_by(TestQuestion.order).all()
+    answers_by_q = {a.question_id: a for a in submission.answers}
+
+    questions = []
+    for tq in test_questions:
+        q = tq.question
+        answer = answers_by_q.get(q.id)
+        entry = {
+            "question_id": q.id,
+            "order": tq.order,
+            "content": q.content,
+            "type": q.type,
+            "type_label": format_type_label(q),
+            "answer_types": get_answer_types(q),
+            "max_points": tq.points if tq.points is not None else q.points,
+            "answer": None,
+        }
+        if answer:
+            entry["answer"] = {
+                "id": answer.id,
+                "answer_text": answer.answer_text,
+                "code": answer.code,
+                "diagram_data": answer.diagram_data,
+                "score": answer.score,
+                "feedback": answer.feedback,
+            }
+        questions.append(entry)
+
+    grade = submission.grade
+    grade_data = None
+    if grade:
+        grade_data = {
+            "total_score": grade.total_score,
+            "max_score": grade.max_score,
+            "percentage": grade.percentage,
+            "graded_at": grade.graded_at.isoformat() if grade.graded_at else None,
+        }
+
+    return {
+        "questions": questions,
+        "grade": grade_data,
+        "can_view_results": submission.status in (SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED),
+        "results_ready": submission.status == SUBMISSION_STATUS_GRADED or grade is not None,
+    }
+
+
+def _submission_response(submission, include_answers=False, include_results=False):
     """Build submission JSON with timing info."""
     live_session = get_active_live_session(submission.test, db_session)
     auto_submit_if_expired(submission, db_session, live_session)
@@ -43,6 +94,9 @@ def _submission_response(submission, include_answers=False):
             "score": a.score,
             "feedback": a.feedback
         } for a in answers]
+
+    if include_results:
+        data.update(_student_results_detail(submission))
 
     return data
 
@@ -97,7 +151,16 @@ def get_submission(submission_id):
     if user.role == 'student' and submission.user_id != user_id:
         return jsonify({"error": "Access denied"}), 403
 
-    return jsonify(_submission_response(submission, include_answers=True)), 200
+    include_results = (
+        user.role == 'student'
+        and submission.status in (SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED)
+    )
+
+    return jsonify(_submission_response(
+        submission,
+        include_answers=not include_results,
+        include_results=include_results,
+    )), 200
 
 
 @bp.route('', methods=['POST'])

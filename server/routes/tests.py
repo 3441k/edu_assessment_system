@@ -11,7 +11,7 @@ from server.services.live_session import (
     get_active_live_session, live_session_info, finalize_expired_live_sessions
 )
 from shared.question_utils import get_answer_types, question_has_type
-from shared.constants import TEST_MODE_SCHEDULED, TEST_MODE_LIVE, API_TESTS
+from shared.constants import TEST_MODE_SCHEDULED, TEST_MODE_LIVE, API_TESTS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED
 from datetime import datetime
 
 
@@ -71,11 +71,22 @@ def _student_test_extras(test, user):
         in_progress = False
 
     can_access = can_access_test(test, submission if in_progress else None, live_session)
+    grade = submission.grade if submission else None
+    can_view_results = bool(
+        submission
+        and submission.status in (SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED)
+    )
+    results_ready = bool(
+        submission
+        and (submission.status == SUBMISSION_STATUS_GRADED or grade is not None)
+    )
     extras = {
         "submission_status": submission_status,
         "submission_id": submission_id,
         "test_mode": getattr(test, 'test_mode', TEST_MODE_SCHEDULED),
         "can_access": can_access,
+        "can_view_results": can_view_results,
+        "results_ready": results_ready,
         **live_session_info(live_session),
     }
     extras["availability_status"] = get_availability_status(test, live_session)
