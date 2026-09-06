@@ -10,6 +10,8 @@ if __name__ == "__main__":
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
+import shared.sqlite_compat  # noqa: F401, E402 — before SQLAlchemy/sqlite3
+
 from flask import Flask, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv

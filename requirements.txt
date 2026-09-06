@@ -4,6 +4,7 @@ Flask-CORS==4.0.0
 SQLAlchemy==2.0.23
 bcrypt==4.1.1
 python-dotenv==1.0.0
+pysqlite3-binary==0.5.4.post2
 
 # Desktop Applications (Lecturer & Student)
 PyQt5==5.15.10

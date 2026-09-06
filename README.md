@@ -36,6 +36,41 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+On some Linux systems the built-in `sqlite3` module is too old for SQLAlchemy. This project includes **`pysqlite3-binary`** in `requirements.txt` and loads it automatically via `shared/sqlite_compat.py` in the run scripts and database entry points.
+
+If you start the app with a **custom Python script** (not `run_server.py` / `run_server_production.py`), add these lines **before** any import that uses SQLite or SQLAlchemy:
+
+```python
+import sys
+import pysqlite3
+sys.modules['sqlite3'] = pysqlite3
+```
+
+Alternatively, after adding the project root to `sys.path`:
+
+```python
+import shared.sqlite_compat  # noqa: F401
+```
+
+### Offline installation
+
+On a machine with internet, download wheels for transfer to an offline classroom PC:
+
+```bash
+mkdir offline_packages
+pip download -r requirements.txt -d offline_packages
+# Optional: Python 3.13-specific pins
+pip download -r requirements_local_313.txt -d offline_packages
+```
+
+Copy the project folder and `offline_packages/` to the offline machine, then:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install --no-index --find-links=offline_packages -r requirements.txt
+```
+
 3. Initialize the database:
 ```bash
 python database/init_db.py

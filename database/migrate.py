@@ -1,8 +1,13 @@
 """Apply lightweight schema migrations for existing databases."""
 
 import os
-import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+import shared.sqlite_compat  # noqa: F401, E402 — before sqlite3
+
+import sqlite3
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine

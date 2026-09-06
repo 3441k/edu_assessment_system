@@ -11,6 +11,8 @@ import sys
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
+import shared.sqlite_compat  # noqa: F401, E402 — before SQLAlchemy/sqlite3
+
 from dotenv import load_dotenv
 
 load_dotenv()

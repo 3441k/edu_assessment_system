@@ -7,6 +7,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import shared.sqlite_compat  # noqa: F401, E402 — before SQLAlchemy/sqlite3
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from server.models import Base, User, Topic

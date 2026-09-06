@@ -1,5 +1,7 @@
 """Database configuration and session management."""
 
+import shared.sqlite_compat  # noqa: F401 — before sqlite3/SQLAlchemy
+
 import os
 import sqlite3
 from sqlalchemy import create_engine, event
