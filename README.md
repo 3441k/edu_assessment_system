@@ -138,7 +138,9 @@ Typical classroom use (**~10–15 simultaneous users**) works on a modern laptop
 
 The web UI targets **Firefox 64+**, Chrome, and recent Edge. Older Firefox versions do not support `?.` and `??` in JavaScript; the project avoids that syntax and uses **Chart.js 3.9** (not v4) for statistics charts.
 
-If pages stay blank on an old browser, hard-refresh (Ctrl+Shift+R) after updating. Ensure the **server** is started with `run_server.py` or `run_server_production.py` (includes the SQLite compatibility shim via `shared/sqlite_compat.py`).
+Bootstrap, Font Awesome, Chart.js, and CodeMirror are **bundled under `server/static/vendor/`** so the web UI works on offline classroom PCs (no CDN required). If layout looks broken or you see `bootstrap is not defined`, the server is serving an old copy — pull the latest code and hard-refresh (Ctrl+Shift+R).
+
+Ensure the **server** is started with `run_server.py` or `run_server_production.py` (includes the SQLite compatibility shim via `shared/sqlite_compat.py`).
 
 ## Default Credentials
 

@@ -229,7 +229,7 @@ const LecturerUI = {
                     const data = JSON.parse(q.correct_answer);
                     if (data.choices) document.getElementById('mcChoices').value = data.choices.join('\n');
                     if (data.correct) document.getElementById('mcCorrect').value = data.correct;
-                } catch { document.getElementById('mcCorrect').value = q.correct_answer; }
+                } catch (e) { document.getElementById('mcCorrect').value = q.correct_answer; }
             }
             if (types.includes('code') && q.test_cases) {
                 document.getElementById('codeTestCases').value = JSON.stringify(q.test_cases, null, 2);
@@ -262,7 +262,7 @@ const LecturerUI = {
             const tc = tcEl ? tcEl.value.trim() : '';
             if (tc) {
                 try { data.test_cases = JSON.parse(tc); }
-                catch { return alert('Invalid test cases JSON'); }
+                catch (e) { return alert('Invalid test cases JSON'); }
             }
         }
 

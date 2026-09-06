@@ -3,8 +3,8 @@
 {% block title %}Take Test - Assessment System{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/css/codemirror.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/css/monokai.min.css') }}">
 <style>
     .test-header {
         border-bottom: 1px solid #eee;
@@ -181,8 +181,8 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/legacy.js') }}"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/codemirror/js/codemirror.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/codemirror/js/mode/python/python.min.js') }}"></script>
 <script>
 const testId = {{ test_id|tojson }};
 let submissionId = null;
