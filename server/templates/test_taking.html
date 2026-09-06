@@ -180,6 +180,7 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/legacy.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
 <script>
@@ -213,7 +214,8 @@ async function loadTest() {
             window.location.href = '/dashboard';
             return;
         }
-        const seconds = timing.seconds_remaining ?? testData.live_seconds_remaining ?? testData.seconds_remaining;
+        const seconds = coalesce(timing.seconds_remaining,
+            coalesce(testData.live_seconds_remaining, testData.seconds_remaining));
         if (seconds != null && seconds > 0) {
             startTimer(seconds);
         } else if (testData.available_until && testData.test_mode !== 'live') {
@@ -342,7 +344,7 @@ const TYPE_LABELS = {
 
 function parseTextAnswers(savedAnswer, types) {
     const result = { multiple_choice: '', text: '' };
-    if (!savedAnswer?.answer_text) return result;
+    if (!savedAnswer || !savedAnswer.answer_text) return result;
 
     if (types.includes('multiple_choice') && types.includes('text')) {
         try {
@@ -350,7 +352,7 @@ function parseTextAnswers(savedAnswer, types) {
             result.multiple_choice = parsed.multiple_choice || '';
             result.text = parsed.text || '';
             return result;
-        } catch {
+        } catch (e) {
             result.text = savedAnswer.answer_text;
             return result;
         }
@@ -378,7 +380,7 @@ function buildTextAnswer(types, mcValue, textValue) {
 
 function renderAnswerInput(question) {
     const container = document.getElementById(`answer-${question.id}`);
-    const savedAnswer = window.savedAnswers?.[question.id];
+    const savedAnswer = (window.savedAnswers && window.savedAnswers[question.id]) || null;
     const types = getQuestionTypes(question);
     const textAnswers = parseTextAnswers(savedAnswer, types);
 
@@ -397,7 +399,8 @@ function renderAnswerInput(question) {
                 }
             } catch (e) {
                 try {
-                    choices = JSON.parse(question.content.match(/\[(.*?)\]/)?.[1] || '[]');
+                    var bracketMatch = question.content.match(/\[(.*?)\]/);
+                    choices = JSON.parse((bracketMatch && bracketMatch[1]) || '[]');
                 } catch (e2) {
                     choices = [];
                 }
@@ -416,7 +419,7 @@ function renderAnswerInput(question) {
                 `).join('');
             }
         } else if (type === 'code') {
-            body = `<textarea id="code-${question.id}" class="form-control" rows="12">${escapeHtml(savedAnswer?.code || '')}</textarea>`;
+            body = `<textarea id="code-${question.id}" class="form-control" rows="12">${escapeHtml((savedAnswer && savedAnswer.code) || '')}</textarea>`;
         } else if (type === 'diagram') {
             body = `
                 <div class="canvas-wrapper" id="canvas-wrap-${question.id}">
@@ -500,13 +503,13 @@ function resizeCanvas(questionId, savedDataUrl) {
 
 function initQuestionInputs(question) {
     const types = getQuestionTypes(question);
-    const saved = window.savedAnswers?.[question.id];
+    const saved = (window.savedAnswers && window.savedAnswers[question.id]) || null;
 
     if (types.includes('code')) {
         ensureCodeEditor(question.id);
     }
     if (types.includes('diagram')) {
-        ensureCanvas(question.id, saved?.diagram_data || null);
+        ensureCanvas(question.id, (saved && saved.diagram_data) || null);
     }
 }
 
@@ -518,7 +521,7 @@ function escapeHtml(text) {
 }
 
 function escapeAttr(text) {
-    return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return String(coalesce(text, '')).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function getAnswerDataForQuestion(question) {
@@ -565,7 +568,7 @@ function isCanvasBlank(canvas) {
 
 function isQuestionAnswered(index) {
     const question = testData.questions[index];
-    const saved = window.savedAnswers?.[question.id];
+    const saved = (window.savedAnswers && window.savedAnswers[question.id]) || null;
     const current = getAnswerDataForQuestion(question);
 
     if (Object.keys(current).length > 0) return true;
@@ -808,23 +811,23 @@ async function submitTest(skipConfirm = false) {
             credentials: 'include'
         });
 
-        const data = response.headers.get('content-type')?.includes('json')
+        const data = hasJsonResponse(response)
             ? await response.json()
             : null;
 
         if (response.ok) {
-            if (data?.auto_submitted || data?.already_submitted) {
+            if ((data && data.auto_submitted) || (data && data.already_submitted)) {
                 alert('Time expired. Your test has been auto-submitted.');
             }
             if (timerInterval) clearInterval(timerInterval);
             window.location.href = '/dashboard';
         } else {
-            if (data?.already_submitted || data?.auto_submitted) {
+            if ((data && data.already_submitted) || (data && data.auto_submitted)) {
                 if (timerInterval) clearInterval(timerInterval);
                 window.location.href = '/dashboard';
                 return;
             }
-            alert(data?.error || 'Error submitting test. Please try again.');
+            alert((data && data.error) || 'Error submitting test. Please try again.');
         }
     } catch (error) {
         console.error('Error submitting test:', error);

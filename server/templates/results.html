@@ -36,7 +36,7 @@ function parseTextAnswerParts(answerText, types) {
             result.multiple_choice = parsed.multiple_choice || '';
             result.text = parsed.text || '';
             return result;
-        } catch {
+        } catch (e) {
             result.text = answerText;
             return result;
         }

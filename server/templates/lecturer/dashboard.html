@@ -331,10 +331,12 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/legacy.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 <script src="{{ url_for('static', filename='js/lecturer.js') }}"></script>
 <script>
-document.querySelector('.navbar a[href="/logout"]')?.setAttribute('href', '/lecturer/logout');
+var logoutLink = document.querySelector('.navbar a[href="/logout"]');
+if (logoutLink) logoutLink.setAttribute('href', '/lecturer/logout');
 document.addEventListener('DOMContentLoaded', () => LecturerUI.init());
 </script>
 {% endblock %}

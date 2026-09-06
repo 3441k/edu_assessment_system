@@ -23,6 +23,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/legacy.js') }}"></script>
 <script>
 const SUBMISSION_ID = {{ submission_id|tojson }};
 
@@ -36,8 +37,8 @@ const GradingPage = {
             opts.body = JSON.stringify(data);
         }
         const res = await fetch(endpoint, opts);
-        const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-        if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
+        const json = hasJsonResponse(res) ? await res.json() : null;
+        if (!res.ok) throw new Error(apiError(json, res.status));
         return json;
     },
 
@@ -56,7 +57,7 @@ const GradingPage = {
                 result.multiple_choice = parsed.multiple_choice || '';
                 result.text = parsed.text || '';
                 return result;
-            } catch {
+            } catch (e) {
                 result.text = answerText;
                 return result;
             }
@@ -67,7 +68,8 @@ const GradingPage = {
     },
 
     async init() {
-        document.querySelector('.navbar a[href="/logout"]')?.setAttribute('href', '/lecturer/logout');
+        var logoutLink = document.querySelector('.navbar a[href="/logout"]');
+        if (logoutLink) logoutLink.setAttribute('href', '/lecturer/logout');
         try {
             const me = await this.api('GET', '/api/v1/auth/me');
             if (me.role !== 'lecturer') { window.location.href = '/lecturer/login'; return; }
@@ -122,7 +124,7 @@ const GradingPage = {
                         <div class="row mt-3">
                             <div class="col-md-3">
                                 <label class="form-label">Score (0 - ${q.points})</label>
-                                <input type="number" class="form-control score-input" data-answer-id="${ans.id || ''}" data-max="${q.points}" value="${ans.score ?? ''}" min="0" max="${q.points}" step="0.1">
+                                <input type="number" class="form-control score-input" data-answer-id="${ans.id || ''}" data-max="${q.points}" value="${ans.score != null ? ans.score : ''}" min="0" max="${q.points}" step="0.1">
                             </div>
                             <div class="col-md-9">
                                 <label class="form-label">Feedback</label>
@@ -169,9 +171,10 @@ const GradingPage = {
     async finalize() {
         const cards = document.querySelectorAll('[id^="question-"]');
         for (const card of cards) {
-            const answerId = card.querySelector('.score-input')?.dataset.answerId;
-            if (!answerId) continue;
             const scoreInput = card.querySelector('.score-input');
+            if (!scoreInput) continue;
+            const answerId = scoreInput.dataset.answerId;
+            if (!answerId) continue;
             const scoreRaw = scoreInput.value.trim();
             const max = parseFloat(scoreInput.dataset.max);
             const feedback = card.querySelector('.feedback-input').value;

@@ -29,14 +29,14 @@ const LecturerUI = {
             }
         }
         const res = await fetch(endpoint, opts);
-        const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-        if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
+        const json = hasJsonResponse(res) ? await res.json() : null;
+        if (!res.ok) throw new Error(apiError(json, res.status));
         return json;
     },
 
     escapeHtml(text) {
         const div = document.createElement('div');
-        div.textContent = text ?? '';
+        div.textContent = coalesce(text, '');
         return div.innerHTML;
     },
 
@@ -68,7 +68,7 @@ const LecturerUI = {
         try {
             const me = await this.api('GET', '/api/v1/auth/me');
             if (me.role !== 'lecturer') { window.location.href = '/lecturer/login'; return; }
-        } catch {
+        } catch (e) {
             window.location.href = '/lecturer/login';
             return;
         }
@@ -77,18 +77,24 @@ const LecturerUI = {
         await this.loadQuestions();
         document.getElementById('topicFilter').addEventListener('change', () => this.loadQuestions());
 
-        document.querySelector('[data-bs-target="#testsTab"]')?.addEventListener('shown.bs.tab', () => {
+        var testsTab = document.querySelector('[data-bs-target="#testsTab"]');
+        if (testsTab) testsTab.addEventListener('shown.bs.tab', () => {
             this.loadTests();
             if (this._testsPoll) clearInterval(this._testsPoll);
             this._testsPoll = setInterval(() => this.loadTests(), 5000);
         });
-        document.querySelector('[data-bs-target="#questionsTab"]')?.addEventListener('shown.bs.tab', () => {
+        var questionsTab = document.querySelector('[data-bs-target="#questionsTab"]');
+        if (questionsTab) questionsTab.addEventListener('shown.bs.tab', () => {
             if (this._testsPoll) { clearInterval(this._testsPoll); this._testsPoll = null; }
         });
-        document.querySelector('[data-bs-target="#gradingTab"]')?.addEventListener('shown.bs.tab', () => this.loadGrading());
-        document.querySelector('[data-bs-target="#statisticsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStatistics());
-        document.querySelector('[data-bs-target="#groupsTab"]')?.addEventListener('shown.bs.tab', () => this.loadGroups());
-        document.querySelector('[data-bs-target="#studentsTab"]')?.addEventListener('shown.bs.tab', () => this.loadStudents());
+        var gradingTab = document.querySelector('[data-bs-target="#gradingTab"]');
+        if (gradingTab) gradingTab.addEventListener('shown.bs.tab', () => this.loadGrading());
+        var statisticsTab = document.querySelector('[data-bs-target="#statisticsTab"]');
+        if (statisticsTab) statisticsTab.addEventListener('shown.bs.tab', () => this.loadStatistics());
+        var groupsTab = document.querySelector('[data-bs-target="#groupsTab"]');
+        if (groupsTab) groupsTab.addEventListener('shown.bs.tab', () => this.loadGroups());
+        var studentsTab = document.querySelector('[data-bs-target="#studentsTab"]');
+        if (studentsTab) studentsTab.addEventListener('shown.bs.tab', () => this.loadStudents());
         await this.loadGroups();
     },
 
@@ -252,7 +258,8 @@ const LecturerUI = {
             data.correct_answer = JSON.stringify({ choices, correct });
         }
         if (answerTypes.includes('code')) {
-            const tc = document.getElementById('codeTestCases')?.value.trim();
+            const tcEl = document.getElementById('codeTestCases');
+            const tc = tcEl ? tcEl.value.trim() : '';
             if (tc) {
                 try { data.test_cases = JSON.parse(tc); }
                 catch { return alert('Invalid test cases JSON'); }
@@ -499,7 +506,7 @@ const LecturerUI = {
     },
 
     renderGroupFilterSelect() {
-        const sel = this.statsState.groupFilter ?? '';
+        const sel = coalesce(this.statsState.groupFilter, '');
         return `<label class="form-label mb-0 small text-muted">Group</label>
             <select class="form-select form-select-sm" style="width:auto;min-width:150px;" onchange="LecturerUI.statsState.groupFilter=this.value; LecturerUI.loadStatistics();">
                 <option value="" ${sel === '' ? 'selected' : ''}>All groups</option>
@@ -541,7 +548,7 @@ const LecturerUI = {
     },
 
     scoreBarHtml(pct) {
-        const p = pct ?? 0;
+        const p = coalesce(pct, 0);
         const color = p >= 70 ? '#667eea' : p >= 50 ? '#f0ad4e' : '#dc3545';
         return `<div class="stats-score-bar"><div class="stats-score-bar-fill" style="width:${Math.min(100, p)}%;background:${color}"></div></div>`;
     },
@@ -690,8 +697,11 @@ const LecturerUI = {
                 },
             });
         } else {
-            document.querySelector('#chartDistribution')?.parentElement?.insertAdjacentHTML('beforeend',
-                '<p class="text-muted small text-center mb-0">No graded submissions for this test.</p>');
+            var chartDistEl = document.querySelector('#chartDistribution');
+            if (chartDistEl && chartDistEl.parentElement) {
+                chartDistEl.parentElement.insertAdjacentHTML('beforeend',
+                    '<p class="text-muted small text-center mb-0">No graded submissions for this test.</p>');
+            }
         }
     },
 
@@ -1035,7 +1045,7 @@ const LecturerUI = {
                 label: row.group_name,
                 data: chartTests.map(ct => {
                     const g = ct.groups.find(x => x.group_id === row.group_id);
-                    return g?.average_percentage ?? null;
+                    return g && g.average_percentage != null ? g.average_percentage : null;
                 }),
                 backgroundColor: this.groupChartColor(gi),
             }));
@@ -1078,7 +1088,7 @@ const LecturerUI = {
         this.populateGroupSelects();
         const rows = (this.groups || []).map(g => `<tr class="${g.is_virtual ? '' : 'stats-clickable-row'}" ${g.is_virtual ? '' : `onclick="LecturerUI.viewGroupDetail(${g.id})"`}>
             <td><strong>${this.escapeHtml(g.name)}</strong>${g.is_virtual ? ' <span class="badge bg-secondary">virtual</span>' : ''}</td>
-            <td>${g.student_count ?? 0}</td>
+            <td>${coalesce(g.student_count, 0)}</td>
             <td>${g.average_percentage != null ? this.pctBadge(g.average_percentage) : '—'}</td>
             <td onclick="event.stopPropagation()">${g.is_virtual ? `<button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.filterStudentsByGroup(0)">View students</button>` :
                 `<button class="btn btn-sm btn-outline-primary me-1" onclick="LecturerUI.viewGroupDetail(${g.id})">View</button>
@@ -1121,8 +1131,8 @@ const LecturerUI = {
         document.getElementById('groupModalTitle').textContent = id ? 'Edit Group' : 'Create Group';
         if (id) {
             const g = (this.groups || []).find(x => x.id === id);
-            document.getElementById('groupName').value = g?.name || '';
-            document.getElementById('groupDescription').value = g?.description || '';
+            document.getElementById('groupName').value = (g && g.name) || '';
+            document.getElementById('groupDescription').value = (g && g.description) || '';
         } else {
             document.getElementById('groupName').value = '';
             document.getElementById('groupDescription').value = '';
@@ -1156,7 +1166,8 @@ const LecturerUI = {
 
     // --- Students ---
     async loadStudents() {
-        const groupFilter = document.getElementById('studentGroupFilter')?.value ?? '';
+        var groupFilterEl = document.getElementById('studentGroupFilter');
+        const groupFilter = groupFilterEl ? coalesce(groupFilterEl.value, '') : '';
         const params = groupFilter !== '' ? `?group_id=${encodeURIComponent(groupFilter)}` : '';
         const students = await this.api('GET', `/api/v1/students${params}`);
         const rows = students.map(s => `<tr>
@@ -1184,7 +1195,7 @@ const LecturerUI = {
             document.getElementById('studentUsername').value = s.username;
             document.getElementById('studentPassword').value = '';
             document.getElementById('studentIdField').value = s.student_id || '';
-            this.populateGroupSelects(s.group_id ?? '');
+            this.populateGroupSelects(s.group_id != null ? s.group_id : '');
         } else {
             document.getElementById('studentUsername').value = '';
             document.getElementById('studentPassword').value = '';

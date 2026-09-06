@@ -134,6 +134,12 @@ SQLITE_BUSY_TIMEOUT_MS=30000
 
 Typical classroom use (**~10–15 simultaneous users**) works on a modern laptop (4 GB+ RAM) when you run `./run_server_production.py` instead of the debug server. The heaviest load is auto-grading **code** questions for many students at once. See `QUICKSTART.md` for deployment details.
 
+## Browser support
+
+The web UI targets **Firefox 64+**, Chrome, and recent Edge. Older Firefox versions do not support `?.` and `??` in JavaScript; the project avoids that syntax and uses **Chart.js 3.9** (not v4) for statistics charts.
+
+If pages stay blank on an old browser, hard-refresh (Ctrl+Shift+R) after updating. Ensure the **server** is started with `run_server.py` or `run_server_production.py` (includes the SQLite compatibility shim via `shared/sqlite_compat.py`).
+
 ## Default Credentials
 
 After initialization, a default lecturer account is created:
