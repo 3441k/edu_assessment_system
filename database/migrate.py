@@ -54,6 +54,9 @@ def run_migrations():
     if _table_exists(cursor, "users") and not _column_exists(cursor, "users", "group_id"):
         cursor.execute("ALTER TABLE users ADD COLUMN group_id INTEGER REFERENCES groups(id)")
 
+    if _table_exists(cursor, "questions") and not _column_exists(cursor, "questions", "image_data"):
+        cursor.execute("ALTER TABLE questions ADD COLUMN image_data TEXT")
+
     # WAL mode: better concurrent reads/writes for multiple students (auto-save, submit)
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA busy_timeout=30000")

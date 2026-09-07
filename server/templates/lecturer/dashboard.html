@@ -138,6 +138,17 @@
                     <label class="form-label">Content</label>
                     <textarea id="questionContent" class="form-control" rows="3"></textarea>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">Image (optional)</label>
+                    <input type="file" id="questionImageFile" class="form-control form-control-sm" accept="image/png,image/jpeg,image/gif,image/webp" onchange="LecturerUI.onQuestionImageSelected(this)">
+                    <small class="text-muted">PNG, JPEG, GIF, or WebP — max 3 MB</small>
+                    <div id="questionImagePreview" class="mt-2" style="display:none;">
+                        <img id="questionImagePreviewImg" class="img-fluid border rounded" style="max-height:200px;" alt="Question image preview">
+                        <div class="mt-1">
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="LecturerUI.clearQuestionImage()">Remove image</button>
+                        </div>
+                    </div>
+                </div>
                 <div id="questionTypeFields"></div>
                 <div class="mb-3">
                     <label class="form-label">Points</label>

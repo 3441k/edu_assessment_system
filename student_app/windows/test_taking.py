@@ -4,8 +4,24 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QScrollArea, QWidget, QFrame, QTextEdit, QRadioButton, 
                              QButtonGroup, QMessageBox, QGroupBox)
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPainter, QPen, QColor
+from PyQt5.QtGui import QPainter, QPen, QColor, QPixmap
+import base64
 import json
+
+
+def _pixmap_from_data_url(data_url, max_height=400):
+    if not data_url or ',' not in data_url:
+        return None
+    try:
+        raw = base64.b64decode(data_url.split(',', 1)[1])
+    except (ValueError, IndexError):
+        return None
+    pixmap = QPixmap()
+    if not pixmap.loadFromData(raw):
+        return None
+    if pixmap.height() > max_height:
+        pixmap = pixmap.scaledToHeight(max_height, Qt.SmoothTransformation)
+    return pixmap
 
 
 class TestTakingWindow(QDialog):
@@ -206,6 +222,13 @@ class TestTakingWindow(QDialog):
         content = QLabel(question.get('content', ''))
         content.setWordWrap(True)
         layout.addWidget(content)
+
+        if question.get('image_data'):
+            image_label = QLabel()
+            pixmap = _pixmap_from_data_url(question['image_data'], max_height=400)
+            if pixmap:
+                image_label.setPixmap(pixmap)
+                layout.addWidget(image_label)
         
         # Answer input based on type
         answer_widget = self.create_answer_input(question)

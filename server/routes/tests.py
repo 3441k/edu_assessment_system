@@ -184,6 +184,7 @@ def get_test(test_id):
             "type": q.type,
             "answer_types": get_answer_types(q),
             "content": q.content,
+            "image_data": q.image_data,
             "correct_answer": q.correct_answer,
             "test_cases": q.test_cases if question_has_type(q, 'code') else None
         })

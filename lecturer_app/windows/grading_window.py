@@ -4,9 +4,26 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QTableWidget, QTableWidgetItem, QDialog, QTextEdit, 
                              QDoubleSpinBox, QMessageBox, QHeaderView, QSplitter)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
+import base64
 from server.services.grader import auto_grade_code_answer
 from server.app import db_session
 from server.models import Answer
+
+
+def _pixmap_from_data_url(data_url, max_height=400):
+    if not data_url or ',' not in data_url:
+        return None
+    try:
+        raw = base64.b64decode(data_url.split(',', 1)[1])
+    except (ValueError, IndexError):
+        return None
+    pixmap = QPixmap()
+    if not pixmap.loadFromData(raw):
+        return None
+    if pixmap.height() > max_height:
+        pixmap = pixmap.scaledToHeight(max_height, Qt.SmoothTransformation)
+    return pixmap
 
 
 class GradingWindow(QWidget):
@@ -189,6 +206,13 @@ class GradingDialog(QDialog):
         content = QLabel(q_data.get('content', ''))
         content.setWordWrap(True)
         layout.addWidget(content)
+
+        if q_data.get('image_data'):
+            image_label = QLabel()
+            pixmap = _pixmap_from_data_url(q_data['image_data'])
+            if pixmap:
+                image_label.setPixmap(pixmap)
+                layout.addWidget(image_label)
         
         # Answer
         answer = q_data.get('answer')

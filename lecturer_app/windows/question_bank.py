@@ -3,9 +3,45 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QTableWidget, QTableWidgetItem, QDialog, QLineEdit, 
                              QTextEdit, QComboBox, QDoubleSpinBox, QMessageBox,
-                             QHeaderView, QGroupBox, QListWidget)
+                             QHeaderView, QGroupBox, QListWidget, QFileDialog)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
+import base64
 from shared.constants import QUESTION_TYPES, QUESTION_TYPE_MULTIPLE_CHOICE, QUESTION_TYPE_CODE
+
+
+def _pixmap_from_data_url(data_url, max_height=200):
+    if not data_url or ',' not in data_url:
+        return None
+    try:
+        raw = base64.b64decode(data_url.split(',', 1)[1])
+    except (ValueError, IndexError):
+        return None
+    pixmap = QPixmap()
+    if not pixmap.loadFromData(raw):
+        return None
+    if pixmap.height() > max_height:
+        pixmap = pixmap.scaledToHeight(max_height, Qt.SmoothTransformation)
+    return pixmap
+
+
+def _data_url_from_file(path, max_bytes=3 * 1024 * 1024):
+    with open(path, 'rb') as f:
+        data = f.read()
+    if len(data) > max_bytes:
+        raise ValueError('Image must be 3 MB or smaller')
+    ext = path.rsplit('.', 1)[-1].lower()
+    mime = {
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+    }.get(ext)
+    if not mime:
+        raise ValueError('Use PNG, JPEG, GIF, or WebP')
+    encoded = base64.b64encode(data).decode('ascii')
+    return f'data:{mime};base64,{encoded}'
 
 
 class QuestionBankWindow(QWidget):
@@ -175,6 +211,13 @@ class QuestionDialog(QDialog):
         self.api_client = api_client
         self.topics = topics
         self.question = question
+        self.image_data = None
+        self.image_removed = False
+        if question and question.get('id'):
+            try:
+                self.question = api_client.get_question(question['id'])
+            except Exception:
+                pass
         self.init_ui()
     
     def init_ui(self):
@@ -206,6 +249,20 @@ class QuestionDialog(QDialog):
         layout.addWidget(QLabel("Content:"))
         self.content_edit = QTextEdit()
         layout.addWidget(self.content_edit)
+
+        # Optional image attachment
+        image_row = QHBoxLayout()
+        choose_image_btn = QPushButton("Attach Image...")
+        choose_image_btn.clicked.connect(self.choose_image)
+        image_row.addWidget(choose_image_btn)
+        clear_image_btn = QPushButton("Remove Image")
+        clear_image_btn.clicked.connect(self.clear_image)
+        image_row.addWidget(clear_image_btn)
+        image_row.addStretch()
+        layout.addLayout(image_row)
+        self.image_preview = QLabel()
+        self.image_preview.setAlignment(Qt.AlignLeft)
+        layout.addWidget(self.image_preview)
         
         # Type-specific fields
         self.type_widget = QWidget()
@@ -257,6 +314,37 @@ class QuestionDialog(QDialog):
         
         self.content_edit.setPlainText(self.question['content'])
         self.points_spin.setValue(self.question['points'])
+        if self.question.get('image_data'):
+            self.image_data = self.question['image_data']
+            self._update_image_preview()
+    
+    def choose_image(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose question image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.gif *.webp)",
+        )
+        if not path:
+            return
+        try:
+            self.image_data = _data_url_from_file(path)
+            self.image_removed = False
+            self._update_image_preview()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Error", str(exc))
+
+    def clear_image(self):
+        self.image_data = None
+        self.image_removed = True
+        self.image_preview.clear()
+
+    def _update_image_preview(self):
+        pixmap = _pixmap_from_data_url(self.image_data)
+        if pixmap:
+            self.image_preview.setPixmap(pixmap)
+        else:
+            self.image_preview.clear()
     
     def on_type_changed(self):
         """Handle type change."""
@@ -367,6 +455,11 @@ class QuestionDialog(QDialog):
                 except:
                     QMessageBox.warning(self, "Error", "Invalid JSON format for test cases")
                     return
+
+        if self.image_data:
+            question_data['image_data'] = self.image_data
+        elif self.image_removed:
+            question_data['image_data'] = None
         
         try:
             if self.question:

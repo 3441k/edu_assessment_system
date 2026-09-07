@@ -63,6 +63,7 @@ def get_submission_for_grading(submission_id):
             "type_label": format_type_label(q),
             "answer_types": get_answer_types(q),
             "content": q.content,
+            "image_data": q.image_data,
             "points": tq.points if tq.points is not None else q.points,
             "correct_answer": q.correct_answer,
             "test_cases": q.test_cases,

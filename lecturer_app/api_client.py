@@ -36,6 +36,10 @@ class LecturerAPIClient(APIClient):
         if topic_id:
             params['topic_id'] = topic_id
         return self._make_request('GET', f"{API_BASE}/questions", params)
+
+    def get_question(self, question_id):
+        """Get a single question (includes image data when present)."""
+        return self._make_request('GET', f"{API_BASE}/questions/{question_id}")
     
     def create_question(self, question_data):
         """Create a question."""

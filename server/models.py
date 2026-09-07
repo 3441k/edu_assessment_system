@@ -66,6 +66,7 @@ class Question(Base):
     type = Column(String(50), nullable=False)  # primary label: single type or 'composite'
     answer_types = Column(JSON, nullable=True)  # ordered list of answer components
     content = Column(Text, nullable=False)  # Question text/content
+    image_data = Column(Text, nullable=True)  # Optional data-URL image attached to the question
     correct_answer = Column(Text, nullable=True)  # JSON for multiple choice, expected output for code
     test_cases = Column(JSON, nullable=True)  # For code questions: [{"input": "...", "output": "..."}]
     points = Column(Float, default=1.0, nullable=False)

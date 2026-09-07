@@ -16,6 +16,8 @@ const LecturerUI = {
         studentSearch: '',
     },
     _statsCharts: [],
+    _questionImageData: null,
+    _questionImageRemoved: false,
     GROUP_CHART_COLORS: ['#667eea', '#764ba2', '#20c997', '#f0ad4e', '#dc3545', '#6c757d', '#0dcaf0', '#fd7e14'],
 
     async api(method, endpoint, data) {
@@ -162,7 +164,7 @@ const LecturerUI = {
                 <td>${q.id}</td>
                 <td>${this.escapeHtml(topicMap[q.topic_id] || '?')}</td>
                 <td><span class="badge bg-secondary">${this.escapeHtml(typeLabel)}</span></td>
-                <td class="question-content-preview" title="${this.escapeHtml(q.content)}">${this.escapeHtml(preview)}</td>
+                <td class="question-content-preview" title="${this.escapeHtml(q.content)}">${q.has_image ? '<i class="fas fa-image text-muted me-1" title="Has image"></i>' : ''}${this.escapeHtml(preview)}</td>
                 <td>${q.points}</td>
                 <td class="table-actions">
                     <button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.showQuestionModal(${q.id})">Edit</button>
@@ -209,12 +211,70 @@ const LecturerUI = {
         this.onAnswerTypesChange();
     },
 
+    resetQuestionImageState() {
+        this._questionImageData = null;
+        this._questionImageRemoved = false;
+        var fileInput = document.getElementById('questionImageFile');
+        if (fileInput) fileInput.value = '';
+        this.updateQuestionImagePreview(null);
+    },
+
+    updateQuestionImagePreview(src) {
+        var wrap = document.getElementById('questionImagePreview');
+        var img = document.getElementById('questionImagePreviewImg');
+        if (!wrap || !img) return;
+        if (src) {
+            img.src = src;
+            wrap.style.display = 'block';
+        } else {
+            img.removeAttribute('src');
+            wrap.style.display = 'none';
+        }
+    },
+
+    onQuestionImageSelected(input) {
+        if (!input.files || !input.files.length) return;
+        var file = input.files[0];
+        if (!file.type || file.type.indexOf('image/') !== 0) {
+            alert('Please choose a PNG, JPEG, GIF, or WebP image.');
+            input.value = '';
+            return;
+        }
+        if (file.size > 3 * 1024 * 1024) {
+            alert('Image must be 3 MB or smaller.');
+            input.value = '';
+            return;
+        }
+        var reader = new FileReader();
+        var self = this;
+        reader.onload = function (e) {
+            self._questionImageData = e.target.result;
+            self._questionImageRemoved = false;
+            self.updateQuestionImagePreview(self._questionImageData);
+        };
+        reader.readAsDataURL(file);
+    },
+
+    clearQuestionImage() {
+        this._questionImageData = null;
+        this._questionImageRemoved = true;
+        var fileInput = document.getElementById('questionImageFile');
+        if (fileInput) fileInput.value = '';
+        this.updateQuestionImagePreview(null);
+    },
+
+    questionImageHtml(imageData) {
+        if (!imageData) return '';
+        return `<div class="mb-3"><img src="${imageData}" class="img-fluid border rounded" style="max-height:400px;" alt="Question figure"></div>`;
+    },
+
     async showQuestionModal(questionId) {
         document.getElementById('questionId').value = questionId || '';
         document.getElementById('questionModalTitle').textContent = questionId ? 'Edit Question' : 'Add Question';
         document.getElementById('questionContent').value = '';
         document.getElementById('questionPoints').value = '1';
         this.setSelectedAnswerTypes(['multiple_choice']);
+        this.resetQuestionImageState();
 
         if (questionId) {
             const q = this.questions.find(x => x.id === questionId) ||
@@ -233,6 +293,10 @@ const LecturerUI = {
             }
             if (types.includes('code') && q.test_cases) {
                 document.getElementById('codeTestCases').value = JSON.stringify(q.test_cases, null, 2);
+            }
+            if (q.image_data) {
+                this._questionImageData = q.image_data;
+                this.updateQuestionImagePreview(q.image_data);
             }
         }
         new bootstrap.Modal(document.getElementById('questionModal')).show();
@@ -264,6 +328,12 @@ const LecturerUI = {
                 try { data.test_cases = JSON.parse(tc); }
                 catch (e) { return alert('Invalid test cases JSON'); }
             }
+        }
+
+        if (this._questionImageData) {
+            data.image_data = this._questionImageData;
+        } else if (this._questionImageRemoved) {
+            data.image_data = null;
         }
 
         try {

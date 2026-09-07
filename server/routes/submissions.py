@@ -29,6 +29,7 @@ def _student_results_detail(submission):
             "question_id": q.id,
             "order": tq.order,
             "content": q.content,
+            "image_data": q.image_data,
             "type": q.type,
             "type_label": format_type_label(q),
             "answer_types": get_answer_types(q),

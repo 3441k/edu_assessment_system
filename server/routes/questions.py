@@ -8,6 +8,8 @@ from shared.question_utils import get_answer_types, normalize_answer_types, form
 
 bp = Blueprint('questions', __name__, url_prefix=API_QUESTIONS)
 
+MAX_IMAGE_DATA_LEN = 4_000_000  # ~3 MB as base64 data URL
+
 
 def require_lecturer():
     """Check if user is a lecturer."""
@@ -23,19 +25,35 @@ def require_lecturer():
     return user, None, None
 
 
-def _serialize_question(question):
-    return {
+def _validate_image_data(image_data):
+    if image_data is None or image_data == '':
+        return None
+    if not isinstance(image_data, str):
+        return 'image_data must be a string'
+    if not image_data.startswith('data:image/'):
+        return 'Invalid image format (expected PNG, JPEG, GIF, or WebP)'
+    if len(image_data) > MAX_IMAGE_DATA_LEN:
+        return 'Image too large (max 3 MB)'
+    return None
+
+
+def _serialize_question(question, include_image=False):
+    data = {
         "id": question.id,
         "topic_id": question.topic_id,
         "type": question.type,
         "type_label": format_type_label(question),
         "answer_types": get_answer_types(question),
         "content": question.content,
+        "has_image": bool(question.image_data),
         "correct_answer": question.correct_answer,
         "test_cases": question.test_cases,
         "points": question.points,
         "created_at": question.created_at.isoformat() if question.created_at else None,
     }
+    if include_image:
+        data["image_data"] = question.image_data
+    return data
 
 
 def _apply_question_types(question, data):
@@ -69,7 +87,7 @@ def get_questions():
         query = query.filter_by(topic_id=topic_id)
 
     questions = query.order_by(Question.created_at.desc()).all()
-    return jsonify([_serialize_question(q) for q in questions]), 200
+    return jsonify([_serialize_question(q, include_image=False) for q in questions]), 200
 
 
 @bp.route('/<int:question_id>', methods=['GET'])
@@ -79,7 +97,21 @@ def get_question(question_id):
     if not question:
         return jsonify({"error": "Question not found"}), 404
 
-    return jsonify(_serialize_question(question)), 200
+    return jsonify(_serialize_question(question, include_image=True)), 200
+
+
+def _apply_image_data(question, data):
+    if 'image_data' not in data:
+        return None
+    raw = data.get('image_data')
+    if raw is None or raw == '':
+        question.image_data = None
+        return None
+    err = _validate_image_data(raw)
+    if err:
+        return err
+    question.image_data = raw
+    return None
 
 
 @bp.route('', methods=['POST'])
@@ -114,11 +146,18 @@ def create_question():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    image_data = data.get('image_data')
+    if image_data:
+        img_err = _validate_image_data(image_data)
+        if img_err:
+            return jsonify({"error": img_err}), 400
+
     question = Question(
         topic_id=topic_id,
         type=question_type,
         answer_types=answer_types,
         content=content,
+        image_data=image_data or None,
         correct_answer=correct_answer,
         test_cases=test_cases,
         points=points,
@@ -127,7 +166,7 @@ def create_question():
     db_session.add(question)
     db_session.commit()
 
-    return jsonify(_serialize_question(question)), 201
+    return jsonify(_serialize_question(question, include_image=True)), 201
 
 
 @bp.route('/<int:question_id>', methods=['PUT'])
@@ -161,9 +200,13 @@ def update_question(question_id):
     if 'points' in data:
         question.points = data['points']
 
+    img_err = _apply_image_data(question, data)
+    if img_err:
+        return jsonify({"error": img_err}), 400
+
     db_session.commit()
 
-    return jsonify(_serialize_question(question)), 200
+    return jsonify(_serialize_question(question, include_image=True)), 200
 
 
 @bp.route('/<int:question_id>', methods=['DELETE'])

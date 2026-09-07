@@ -289,6 +289,11 @@ async function loadAnswers() {
     }
 }
 
+function questionImageHtml(imageData) {
+    if (!imageData) return '';
+    return '<div class="mb-3"><img src="' + imageData + '" class="img-fluid border rounded" style="max-height:400px;" alt="Question figure"></div>';
+}
+
 function renderQuestions() {
     const container = document.getElementById('questionsContainer');
     const nav = document.getElementById('questionNav');
@@ -306,6 +311,7 @@ function renderQuestions() {
         questionCard.innerHTML = `
             <h5 class="mb-3">Question ${index + 1} <span class="badge bg-light text-dark">${question.points} pts</span></h5>
             <div class="mb-3">${question.content}</div>
+            ${questionImageHtml(question.image_data)}
             <div id="answer-${question.id}"></div>
         `;
 

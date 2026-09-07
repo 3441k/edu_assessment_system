@@ -119,6 +119,7 @@ const GradingPage = {
                     </div>
                     <div class="card-body">
                         <p><strong>${this.escapeHtml(q.content)}</strong></p>
+                        ${q.image_data ? `<div class="mb-3"><img src="${q.image_data}" class="img-fluid border rounded" style="max-height:400px;" alt="Question figure"></div>` : ''}
                         <h6>Student Answer:</h6>
                         ${sections.join('') || '<p class="text-muted">(no answer)</p>'}
                         <div class="row mt-3">
