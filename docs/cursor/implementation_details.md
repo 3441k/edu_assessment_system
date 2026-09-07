@@ -513,7 +513,8 @@ app.config['SESSION_COOKIE_NAME'] = 'assessment_session'
 - `database/migrate.py` enables **WAL journal mode** and `busy_timeout` on startup
 - `server/database.py` applies the same pragmas on each connection
 - Use a **single** server process (`run_server_production.py`); do not run multiple workers against one SQLite file
-- Optional env: `SERVER_THREADS=8`, `SQLITE_BUSY_TIMEOUT_MS=30000`
+- Optional env: `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=15`, `SERVER_THREADS=12`, `SQLITE_BUSY_TIMEOUT_MS=30000`
+- Pool settings are loaded in `server/database.py` at startup; restart required after changes. Keep `DB_POOL_SIZE + DB_MAX_OVERFLOW >= SERVER_THREADS`.
 
 ### Database Backup
 - SQLite database is single file: `database/assessment.db`

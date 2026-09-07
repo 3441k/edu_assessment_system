@@ -126,9 +126,23 @@ SERVER_PORT=5000
 DATABASE_PATH=database/assessment.db
 CODE_EXECUTION_TIMEOUT=5
 CODE_EXECUTION_MEMORY_LIMIT=128
-SERVER_THREADS=8
+DB_POOL_SIZE=15
+DB_MAX_OVERFLOW=15
+SERVER_THREADS=12
 SQLITE_BUSY_TIMEOUT_MS=30000
 ```
+
+### Pool size and concurrency
+
+| Variable | Server script | Default | Purpose |
+|----------|---------------|---------|---------|
+| `DB_POOL_SIZE` | both | 15 | Database connection pool size |
+| `DB_MAX_OVERFLOW` | both | 15 | Extra connections at peak load |
+| `SERVER_THREADS` | production only | 8 | HTTP threads (`run_server_production.py`) |
+
+To change: edit `.env` → **stop server** → start again. Settings do not apply until restart.
+
+For a class session use `./run_server_production.py` and keep `DB_POOL_SIZE + DB_MAX_OVERFLOW >= SERVER_THREADS`.
 
 ## Usage Workflow
 
@@ -209,7 +223,7 @@ student2,password456,STU002,CS-2024-B
 
 - **Connection errors**: Ensure the Flask server is running before starting desktop applications or using web interfaces
 - **Database errors**: Run `python database/init_db.py` to reinitialize. For existing databases, schema updates run automatically on server startup via `database/migrate.py`.
-- **Database is locked**: Use `run_server_production.py` (WAL mode is enabled automatically). Avoid running multiple server processes against the same database file.
+- **Database is locked** / **QueuePool limit**: Use `run_server_production.py`; increase `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, and `SERVER_THREADS` in `.env`, then restart. Keep pool max (size + overflow) ≥ threads.
 - **Port already in use**: Change `SERVER_PORT` in `.env` file
 - **Import errors**: Ensure all dependencies are installed: `pip install -r requirements.txt`
 - **Grading save error**: Each score must be between 0 and the question's maximum points (shown next to the score field)

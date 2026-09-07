@@ -122,16 +122,54 @@ Open browser and navigate to `http://localhost:5000/login`
 ## Configuration
 
 Create a `.env` file in the root directory:
-```
+
+```env
 SERVER_HOST=0.0.0.0
 SERVER_PORT=5000
 DATABASE_PATH=database/assessment.db
 CODE_EXECUTION_TIMEOUT=5
 CODE_EXECUTION_MEMORY_LIMIT=128
-# Optional — production server (run_server_production.py)
-SERVER_THREADS=8
+
+# Concurrency (see "Controlling pool size" below)
+DB_POOL_SIZE=15
+DB_MAX_OVERFLOW=15
 SQLITE_BUSY_TIMEOUT_MS=30000
+SERVER_THREADS=12
 ```
+
+### Controlling pool size and concurrency
+
+Two separate limits affect how many students can use the system at once:
+
+| Setting | Applies to | Default | What it does |
+|---------|------------|---------|--------------|
+| `DB_POOL_SIZE` | `./run_server.py` and `./run_server_production.py` | `15` | SQLAlchemy connections kept open |
+| `DB_MAX_OVERFLOW` | both server scripts | `15` | Extra connections under peak load (max = size + overflow) |
+| `SERVER_THREADS` | **`run_server_production.py` only** | `8` | HTTP worker threads (Waitress) |
+
+**Rule of thumb:** `DB_POOL_SIZE + DB_MAX_OVERFLOW` should be **≥ `SERVER_THREADS`** when using the production server.
+
+**Steps to change (requires restart):**
+
+1. Stop the server (Ctrl+C).
+2. Edit `.env` in the project root (create it if missing).
+3. Set values, for example for ~15 students:
+   ```env
+   DB_POOL_SIZE=15
+   DB_MAX_OVERFLOW=15
+   SERVER_THREADS=12
+   ```
+4. Start the server again.
+5. Confirm on startup — production server prints:
+   ```
+   Threads: 12
+   DB pool: size=15, max_overflow=15
+   ```
+   Development server (`run_server.py`) prints the DB pool line only.
+
+**Cannot be changed while running** — pool and thread settings are read only at startup.
+
+For live classes with many students, prefer `./run_server_production.py` over `./run_server.py` (Flask debug server).
 
 ## Capacity (local network)
 

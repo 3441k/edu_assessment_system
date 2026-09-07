@@ -16,5 +16,6 @@ from server.app import app, SERVER_HOST, SERVER_PORT
 if __name__ == "__main__":
     print(f"Starting server on {SERVER_HOST}:{SERVER_PORT}")
     print(f"Database: {os.getenv('DATABASE_PATH', 'database/assessment.db')}")
+    print(f"DB pool: size={os.getenv('DB_POOL_SIZE', '15')}, max_overflow={os.getenv('DB_MAX_OVERFLOW', '15')}")
     app.run(host=SERVER_HOST, port=SERVER_PORT, debug=True)
 

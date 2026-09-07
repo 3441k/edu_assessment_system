@@ -13,12 +13,16 @@ load_dotenv()
 # Configuration
 DATABASE_PATH = os.getenv("DATABASE_PATH", "database/assessment.db")
 SQLITE_BUSY_TIMEOUT_MS = int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "30000"))
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "15"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "15"))
 
 # Database setup — timeout helps concurrent writes; WAL is set in migrate + connect hook
 engine = create_engine(
     f"sqlite:///{DATABASE_PATH}",
     echo=False,
     connect_args={"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000},
+    pool_size=DB_POOL_SIZE,
+    max_overflow=DB_MAX_OVERFLOW,
 )
 
 
