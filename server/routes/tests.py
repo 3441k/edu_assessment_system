@@ -43,6 +43,69 @@ def _validate_availability(available_from, available_until):
     return None
 
 
+def _add_test_questions(test, question_ids):
+    """Attach questions to a test from API payload."""
+    for idx, q_data in enumerate(question_ids):
+        if isinstance(q_data, dict):
+            question_id = q_data.get('question_id') or q_data.get('id')
+            order = q_data.get('order', idx + 1)
+            points = q_data.get('points')
+        else:
+            question_id = q_data
+            order = idx + 1
+            points = None
+
+        question = db_session.query(Question).filter_by(id=question_id).first()
+        if not question:
+            continue
+
+        db_session.add(TestQuestion(
+            test_id=test.id,
+            question_id=question_id,
+            order=order,
+            points=points,
+        ))
+
+
+def _serialize_test_brief(test):
+    return {
+        "id": test.id,
+        "name": test.name,
+        "description": test.description,
+        "time_limit": test.time_limit,
+        "attempts_allowed": test.attempts_allowed,
+        "available_from": test.available_from.isoformat() if test.available_from else None,
+        "available_until": test.available_until.isoformat() if test.available_until else None,
+        "test_mode": getattr(test, 'test_mode', TEST_MODE_SCHEDULED),
+        "created_at": test.created_at.isoformat() if test.created_at else None,
+        "question_count": len(test.test_questions),
+    }
+
+
+def _duplicate_test(source, name):
+    """Create a new test copied from source (settings + question links)."""
+    copy = Test(
+        name=name,
+        description=source.description,
+        time_limit=source.time_limit,
+        attempts_allowed=source.attempts_allowed,
+        available_from=source.available_from,
+        available_until=source.available_until,
+        test_mode=getattr(source, 'test_mode', TEST_MODE_SCHEDULED),
+    )
+    db_session.add(copy)
+    db_session.flush()
+
+    for tq in sorted(source.test_questions, key=lambda x: x.order):
+        db_session.add(TestQuestion(
+            test_id=copy.id,
+            question_id=tq.question_id,
+            order=tq.order,
+            points=tq.points,
+        ))
+    return copy
+
+
 bp = Blueprint('tests', __name__, url_prefix=API_TESTS)
 
 
@@ -252,39 +315,11 @@ def create_test():
     db_session.add(test)
     db_session.flush()  # Get test.id
     
-    # Add questions
-    for idx, q_data in enumerate(question_ids):
-        if isinstance(q_data, dict):
-            question_id = q_data.get('question_id') or q_data.get('id')
-            order = q_data.get('order', idx + 1)
-            points = q_data.get('points')
-        else:
-            question_id = q_data
-            order = idx + 1
-            points = None
-        
-        question = db_session.query(Question).filter_by(id=question_id).first()
-        if not question:
-            continue
-        
-        test_question = TestQuestion(
-            test_id=test.id,
-            question_id=question_id,
-            order=order,
-            points=points
-        )
-        db_session.add(test_question)
+    _add_test_questions(test, question_ids)
     
     db_session.commit()
     
-    return jsonify({
-        "id": test.id,
-        "name": test.name,
-        "description": test.description,
-        "time_limit": test.time_limit,
-        "attempts_allowed": test.attempts_allowed,
-        "created_at": test.created_at.isoformat() if test.created_at else None
-    }), 201
+    return jsonify(_serialize_test_brief(test)), 201
 
 
 @bp.route('/<int:test_id>', methods=['PUT'])
@@ -326,40 +361,32 @@ def update_test(test_id):
     
     # Update questions if provided
     if 'question_ids' in data:
-        # Delete existing test questions
         db_session.query(TestQuestion).filter_by(test_id=test_id).delete()
-        
-        # Add new questions
-        for idx, q_data in enumerate(data['question_ids']):
-            if isinstance(q_data, dict):
-                question_id = q_data.get('question_id') or q_data.get('id')
-                order = q_data.get('order', idx + 1)
-                points = q_data.get('points')
-            else:
-                question_id = q_data
-                order = idx + 1
-                points = None
-            
-            question = db_session.query(Question).filter_by(id=question_id).first()
-            if question:
-                test_question = TestQuestion(
-                    test_id=test_id,
-                    question_id=question_id,
-                    order=order,
-                    points=points
-                )
-                db_session.add(test_question)
+        _add_test_questions(test, data['question_ids'])
     
     db_session.commit()
     
-    return jsonify({
-        "id": test.id,
-        "name": test.name,
-        "description": test.description,
-        "time_limit": test.time_limit,
-        "attempts_allowed": test.attempts_allowed,
-        "created_at": test.created_at.isoformat() if test.created_at else None
-    }), 200
+    return jsonify(_serialize_test_brief(test)), 200
+
+
+@bp.route('/<int:test_id>/copy', methods=['POST'])
+def copy_test(test_id):
+    """Duplicate a test (settings and question list; no submissions)."""
+    user, error_response, status = require_lecturer()
+    if error_response:
+        return error_response, status
+
+    source = db_session.query(Test).filter_by(id=test_id).first()
+    if not source:
+        return jsonify({"error": "Test not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_name = (data.get('name') or '').strip() or f"{source.name} (Copy)"
+
+    copy = _duplicate_test(source, new_name)
+    db_session.commit()
+
+    return jsonify(_serialize_test_brief(copy)), 201
 
 
 @bp.route('/<int:test_id>', methods=['DELETE'])

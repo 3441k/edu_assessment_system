@@ -18,6 +18,7 @@ const LecturerUI = {
     _statsCharts: [],
     _questionImageData: null,
     _questionImageRemoved: false,
+    _testSelectedQuestionIds: [],
     GROUP_CHART_COLORS: ['#667eea', '#764ba2', '#20c997', '#f0ad4e', '#dc3545', '#6c757d', '#0dcaf0', '#fd7e14'],
 
     async api(method, endpoint, data) {
@@ -389,6 +390,7 @@ const LecturerUI = {
             <td>${t.test_mode === 'live' ? 'Live control' : (t.time_limit ? t.time_limit + ' min' : 'No limit')}</td>
             <td>${this.liveControlButtons(t)}</td>
             <td class="table-actions">
+                <button class="btn btn-sm btn-outline-secondary" onclick="LecturerUI.copyTest(${t.id})" title="Duplicate test">Copy</button>
                 <button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.showTestModal(${t.id})">Edit</button>
                 <button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteTest(${t.id})">Delete</button>
             </td>
@@ -459,31 +461,84 @@ const LecturerUI = {
             selectedIds = (test.questions || []).sort((a, b) => a.order - b.order).map(q => q.id);
         }
 
-        const topicMap = Object.fromEntries(this.topics.map(t => [t.id, t.name]));
-        document.getElementById('testQuestionsList').innerHTML = this.allQuestions.map(q => {
-            const checked = selectedIds.includes(q.id) ? 'checked' : '';
-            const order = selectedIds.indexOf(q.id);
-            const orderLabel = order >= 0 ? ` (#${order + 1})` : '';
-            const preview = q.content.length > 60 ? q.content.slice(0, 60) + '...' : q.content;
-            return `<div class="form-check border-bottom py-1">
-                <input class="form-check-input test-q-check" type="checkbox" value="${q.id}" id="tq-${q.id}" ${checked}
-                    onchange="LecturerUI.updateTestQuestionOrder()">
-                <label class="form-check-label" for="tq-${q.id}">
-                    [${q.type}] ${this.escapeHtml(preview)} (${topicMap[q.topic_id] || '?'})${orderLabel}
-                </label>
-            </div>`;
-        }).join('') || '<p class="text-muted">No questions in bank. Add questions first.</p>';
+        this._testSelectedQuestionIds = selectedIds.slice();
+        this.renderTestQuestionPicker();
 
         new bootstrap.Modal(document.getElementById('testModal')).show();
     },
 
+    renderTestQuestionPicker() {
+        const topicMap = Object.fromEntries(this.topics.map(t => [t.id, t.name]));
+        const selectedSet = {};
+        this._testSelectedQuestionIds.forEach((id, i) => { selectedSet[id] = i + 1; });
+
+        const available = (this.allQuestions || []).filter(q => selectedSet[q.id] === undefined);
+        const availEl = document.getElementById('testQuestionsAvailable');
+        if (availEl) {
+            if (!(this.allQuestions || []).length) {
+                availEl.innerHTML = '<p class="text-muted small mb-0">No questions in bank. Add questions first.</p>';
+            } else {
+                availEl.innerHTML = available.length
+                ? available.map(q => {
+                    const preview = q.content.length > 50 ? q.content.slice(0, 50) + '...' : q.content;
+                    return `<div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
+                        <span class="small">[${this.escapeHtml(q.type)}] ${this.escapeHtml(preview)}
+                            <span class="text-muted">(${this.escapeHtml(topicMap[q.topic_id] || '?')})</span></span>
+                        <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" onclick="LecturerUI.addTestQuestion(${q.id})">Add</button>
+                    </div>`;
+                }).join('')
+                : '<p class="text-muted small mb-0">All questions added.</p>';
+            }
+        }
+
+        const selEl = document.getElementById('testQuestionsSelected');
+        if (!selEl) return;
+        if (!this._testSelectedQuestionIds.length) {
+            selEl.innerHTML = '<p class="text-muted small mb-0">Add questions from the bank.</p>';
+            return;
+        }
+        selEl.innerHTML = this._testSelectedQuestionIds.map((qid, i) => {
+            const q = (this.allQuestions || []).find(x => x.id === qid);
+            if (!q) return '';
+            const preview = q.content.length > 45 ? q.content.slice(0, 45) + '...' : q.content;
+            const upDisabled = i === 0 ? ' disabled' : '';
+            const downDisabled = i === this._testSelectedQuestionIds.length - 1 ? ' disabled' : '';
+            return `<div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
+                <span class="small"><strong>Q${i + 1}.</strong> ${this.escapeHtml(preview)}</span>
+                <span class="flex-shrink-0">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"${upDisabled} onclick="LecturerUI.moveTestQuestion(${qid}, -1)" title="Move up">↑</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"${downDisabled} onclick="LecturerUI.moveTestQuestion(${qid}, 1)" title="Move down">↓</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="LecturerUI.removeTestQuestion(${qid})" title="Remove">×</button>
+                </span>
+            </div>`;
+        }).join('');
+    },
+
+    addTestQuestion(id) {
+        if (this._testSelectedQuestionIds.indexOf(id) >= 0) return;
+        this._testSelectedQuestionIds.push(id);
+        this.renderTestQuestionPicker();
+    },
+
+    removeTestQuestion(id) {
+        this._testSelectedQuestionIds = this._testSelectedQuestionIds.filter(x => x !== id);
+        this.renderTestQuestionPicker();
+    },
+
+    moveTestQuestion(id, delta) {
+        const arr = this._testSelectedQuestionIds;
+        const i = arr.indexOf(id);
+        if (i < 0) return;
+        const j = i + delta;
+        if (j < 0 || j >= arr.length) return;
+        const tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+        this.renderTestQuestionPicker();
+    },
+
     updateTestQuestionOrder() {
-        const checks = [...document.querySelectorAll('.test-q-check:checked')];
-        checks.forEach((cb, i) => {
-            const label = cb.nextElementSibling;
-            const base = label.textContent.replace(/ \(#\d+\)$/, '');
-            label.textContent = base + ` (#${i + 1})`;
-        });
+        this.renderTestQuestionPicker();
     },
 
     async saveTest() {
@@ -496,8 +551,8 @@ const LecturerUI = {
         const attempts = testMode === 'live'
             ? parseInt(document.getElementById('testAttemptsLive').value)
             : parseInt(document.getElementById('testAttempts').value);
-        const question_ids = [...document.querySelectorAll('.test-q-check:checked')].map((cb, i) => ({
-            question_id: parseInt(cb.value), order: i + 1
+        const question_ids = this._testSelectedQuestionIds.map((qid, i) => ({
+            question_id: qid, order: i + 1
         }));
 
         const data = {
@@ -529,16 +584,55 @@ const LecturerUI = {
         } catch (e) { alert('Error: ' + e.message); }
     },
 
+    async copyTest(id) {
+        const source = this.tests.find(t => t.id === id);
+        const defaultName = source ? `${source.name} (Copy)` : '';
+        const name = prompt('Name for the copied test:', defaultName);
+        if (name === null) return;
+        const trimmed = name.trim();
+        if (!trimmed) return alert('Test name is required');
+        try {
+            await this.api('POST', `/api/v1/tests/${id}/copy`, { name: trimmed });
+            await this.loadTests();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
     // --- Grading ---
+    submissionStatusBadge(status) {
+        const map = {
+            in_progress: 'primary',
+            submitted: 'warning text-dark',
+            graded: 'success',
+        };
+        return `<span class="badge bg-${map[status] || 'secondary'}">${this.escapeHtml(status)}</span>`;
+    },
+
+    async resetSubmission(submissionId) {
+        if (!confirm('Reset this submission?\n\nAll answers and grades will be deleted. The student can start the test again if the test is still available.')) {
+            return;
+        }
+        try {
+            await this.api('POST', `/api/v1/submissions/${submissionId}/reset`);
+            if (this.statsState.view === 'testDetail') {
+                await this.loadStatistics();
+            } else {
+                await this.loadGrading();
+            }
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
     async loadGrading() {
         let submissions = await this.api('GET', '/api/v1/submissions');
-        submissions = submissions.filter(s => ['submitted', 'graded'].includes(s.status));
+        submissions = submissions.filter(s => ['in_progress', 'submitted', 'graded'].includes(s.status));
         const rows = submissions.map(s => `<tr>
             <td>${s.id}</td>
             <td>${this.escapeHtml(s.test_name || '?')}</td>
             <td>${this.escapeHtml(s.username || '?')}</td>
-            <td><span class="badge bg-${s.status === 'graded' ? 'success' : 'warning'}">${s.status}</span></td>
-            <td><a href="/lecturer/grading/${s.id}" class="btn btn-sm btn-primary">Grade</a></td>
+            <td>${this.submissionStatusBadge(s.status)}</td>
+            <td class="table-actions">
+                ${s.status !== 'in_progress' ? `<a href="/lecturer/grading/${s.id}" class="btn btn-sm btn-primary me-1">Grade</a>` : ''}
+                <button class="btn btn-sm btn-outline-warning" onclick="LecturerUI.resetSubmission(${s.id})">Reset</button>
+            </td>
         </tr>`);
         document.getElementById('gradingTable').innerHTML = this.tableHtml(
             ['ID', 'Test', 'Student', 'Status', 'Actions'], rows
@@ -876,7 +970,8 @@ const LecturerUI = {
                         <td>${s.total_score != null ? `${s.total_score} / ${s.max_score}` : '—'}</td>
                         <td>${this.pctBadge(s.percentage)}</td>
                         <td><small>${s.submitted_at ? this.formatDatetime(s.submitted_at) : '—'}</small></td>
-                        <td>${s.submission_id ? `<a class="btn btn-sm btn-outline-primary" href="/lecturer/grading/${s.submission_id}">Grade</a>` : '—'}</td>
+                        <td>${s.submission_id ? `<a class="btn btn-sm btn-outline-primary me-1" href="/lecturer/grading/${s.submission_id}">Grade</a>
+                            <button class="btn btn-sm btn-outline-warning" onclick="LecturerUI.resetSubmission(${s.submission_id}); event.stopPropagation();">Reset</button>` : '—'}</td>
                     </tr>`))}
             </div>`;
 

@@ -83,8 +83,15 @@ const GradingPage = {
     render() {
         const s = this.submission;
         document.getElementById('gradingHeader').innerHTML = `
-            <h2>Grade: ${this.escapeHtml(s.test_name)}</h2>
-            <p class="text-muted">Student: ${this.escapeHtml(s.username)} ${s.student_id ? '(' + this.escapeHtml(s.student_id) + ')' : ''} &mdash; Status: <span class="badge bg-info">${this.escapeHtml(s.status)}</span></p>
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                <div>
+                    <h2 class="mb-1">Grade: ${this.escapeHtml(s.test_name)}</h2>
+                    <p class="text-muted mb-0">Student: ${this.escapeHtml(s.username)} ${s.student_id ? '(' + this.escapeHtml(s.student_id) + ')' : ''} &mdash; Status: <span class="badge bg-info">${this.escapeHtml(s.status)}</span></p>
+                </div>
+                <button type="button" class="btn btn-outline-warning btn-sm" onclick="GradingPage.resetSubmission()">
+                    <i class="fas fa-undo me-1"></i>Reset submission (allow retake)
+                </button>
+            </div>
         `;
 
         document.getElementById('gradingContent').innerHTML = s.questions.map((q, i) => {
@@ -118,7 +125,7 @@ const GradingPage = {
                         <span>Question ${i + 1} (${this.escapeHtml(typeLabel)}) &mdash; Max: ${q.points} pts</span>
                     </div>
                     <div class="card-body">
-                        <p><strong>${this.escapeHtml(q.content)}</strong></p>
+                        <div class="mb-2 question-content" style="white-space:pre-wrap;word-break:break-word;"><strong>${this.escapeHtml(q.content)}</strong></div>
                         ${q.image_data ? `<div class="mb-3"><img src="${q.image_data}" class="img-fluid border rounded" style="max-height:400px;" alt="Question figure"></div>` : ''}
                         <h6>Student Answer:</h6>
                         ${sections.join('') || '<p class="text-muted">(no answer)</p>'}
@@ -164,6 +171,19 @@ const GradingPage = {
         try {
             await this.api('PUT', `/api/v1/grading/answers/${answerId}`, { score, feedback });
             alert('Answer saved.');
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    },
+
+    async resetSubmission() {
+        if (!confirm('Reset this submission?\n\nAll answers and grades will be deleted. The student can start the test again if it is still available.')) {
+            return;
+        }
+        try {
+            await this.api('POST', `/api/v1/submissions/${SUBMISSION_ID}/reset`);
+            alert('Submission reset. The student can retake the test.');
+            window.location.href = '/lecturer/dashboard';
         } catch (e) {
             alert('Error: ' + e.message);
         }

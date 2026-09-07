@@ -131,7 +131,7 @@ function renderResults(submission) {
                     <span class="text-muted">${q.max_points} pts max</span>
                 </div>
                 <div class="card-body">
-                    <p><strong>${escapeHtml(q.content)}</strong></p>
+                    <div class="mb-2 question-content" style="white-space:pre-wrap;word-break:break-word;"><strong>${escapeHtml(q.content)}</strong></div>
                     ${q.image_data ? `<div class="mb-3"><img src="${q.image_data}" class="img-fluid border rounded" style="max-height:400px;" alt="Question figure"></div>` : ''}
                     <h6>Your answer</h6>
                     ${renderAnswerSections(q)}

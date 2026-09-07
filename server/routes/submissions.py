@@ -8,10 +8,23 @@ from server.services.test_schedule import (
     auto_submit_if_expired, can_start_test, submission_timing_info
 )
 from server.services.live_session import get_active_live_session
-from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED, TEST_MODE_LIVE
+from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED, TEST_MODE_LIVE, ROLE_LECTURER
 from datetime import datetime
 
 bp = Blueprint('submissions', __name__, url_prefix=API_SUBMISSIONS)
+
+
+def _require_lecturer():
+    user_id = session.get('user_id')
+    if not user_id:
+        return None, jsonify({"error": "Not authenticated"}), 401
+
+    from server.models import User
+    user = db_session.query(User).filter_by(id=user_id).first()
+    if not user or user.role != ROLE_LECTURER:
+        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
+
+    return user, None, None
 
 
 def _student_results_detail(submission):
@@ -332,5 +345,37 @@ def submit_submission(submission_id):
         "id": submission.id,
         "status": submission.status,
         "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None
+    }), 200
+
+
+@bp.route('/<int:submission_id>/reset', methods=['POST'])
+def reset_submission(submission_id):
+    """Delete a student's submission so they can retake the test (lecturer only)."""
+    user, error_response, status = _require_lecturer()
+    if error_response:
+        return error_response, status
+
+    submission = db_session.query(Submission).filter_by(id=submission_id).first()
+    if not submission:
+        return jsonify({"error": "Submission not found"}), 404
+
+    test_name = submission.test.name if submission.test else None
+    username = submission.user.username if submission.user else None
+    test_id = submission.test_id
+    student_id = submission.user_id
+
+    grade = db_session.query(Grade).filter_by(submission_id=submission_id).first()
+    if grade:
+        db_session.delete(grade)
+
+    db_session.delete(submission)
+    db_session.commit()
+
+    return jsonify({
+        "message": "Submission reset. The student can start the test again.",
+        "test_id": test_id,
+        "user_id": student_id,
+        "username": username,
+        "test_name": test_name,
     }), 200
 

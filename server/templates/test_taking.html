@@ -24,6 +24,10 @@
     .question-card {
         min-height: 320px;
     }
+    .question-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
     .question-nav-panel {
         position: sticky;
         top: 20px;
@@ -310,7 +314,7 @@ function renderQuestions() {
 
         questionCard.innerHTML = `
             <h5 class="mb-3">Question ${index + 1} <span class="badge bg-light text-dark">${question.points} pts</span></h5>
-            <div class="mb-3">${question.content}</div>
+            <div class="mb-3 question-content">${escapeHtml(question.content)}</div>
             ${questionImageHtml(question.image_data)}
             <div id="answer-${question.id}"></div>
         `;

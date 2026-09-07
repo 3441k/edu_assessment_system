@@ -78,6 +78,10 @@ class TestEditorWindow(QWidget):
             edit_btn = QPushButton("Edit")
             edit_btn.clicked.connect(lambda checked, t=test: self.edit_test_dialog(t))
             actions_layout.addWidget(edit_btn)
+
+            copy_btn = QPushButton("Copy")
+            copy_btn.clicked.connect(lambda checked, t=test: self.copy_test(t))
+            actions_layout.addWidget(copy_btn)
             
             delete_btn = QPushButton("Delete")
             delete_btn.setStyleSheet("background-color: #dc3545; color: white;")
@@ -121,6 +125,28 @@ class TestEditorWindow(QWidget):
                 self.load_tests()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete test: {str(e)}")
+
+    def copy_test(self, test):
+        """Duplicate a test."""
+        from PyQt5.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self,
+            "Copy Test",
+            "Name for the copied test:",
+            text=f"{test['name']} (Copy)",
+        )
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            QMessageBox.warning(self, "Error", "Please enter a test name")
+            return
+        try:
+            self.api_client.copy_test(test['id'], name)
+            QMessageBox.information(self, "Success", "Test copied successfully")
+            self.load_tests()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to copy test: {str(e)}")
 
 
 class TestDialog(QDialog):
@@ -221,6 +247,15 @@ class TestDialog(QDialog):
         selected_layout = QVBoxLayout()
         self.selected_list = QListWidget()
         selected_layout.addWidget(self.selected_list)
+        reorder_layout = QHBoxLayout()
+        move_up_btn = QPushButton("Move Up")
+        move_up_btn.clicked.connect(self.move_question_up)
+        reorder_layout.addWidget(move_up_btn)
+        move_down_btn = QPushButton("Move Down")
+        move_down_btn.clicked.connect(self.move_question_down)
+        reorder_layout.addWidget(move_down_btn)
+        reorder_layout.addStretch()
+        selected_layout.addLayout(reorder_layout)
         selected_group.setLayout(selected_layout)
         questions_layout.addWidget(selected_group)
         
@@ -287,6 +322,7 @@ class TestDialog(QDialog):
                 item = QListWidgetItem(item_text)
                 item.setData(Qt.UserRole, question)
                 self.selected_list.addItem(item)
+            self._refresh_selected_labels()
         except:
             pass
     
@@ -300,6 +336,7 @@ class TestDialog(QDialog):
             new_item.setData(Qt.UserRole, question)
             self.selected_list.addItem(new_item)
             self.available_list.takeItem(self.available_list.row(item))
+        self._refresh_selected_labels()
     
     def remove_question(self):
         """Remove question from test."""
@@ -313,6 +350,33 @@ class TestDialog(QDialog):
             new_item.setData(Qt.UserRole, question)
             self.available_list.addItem(new_item)
             self.selected_list.takeItem(self.selected_list.row(item))
+        self._refresh_selected_labels()
+
+    def _refresh_selected_labels(self):
+        """Update Q1, Q2, ... prefixes after reorder."""
+        for i in range(self.selected_list.count()):
+            item = self.selected_list.item(i)
+            question = item.data(Qt.UserRole)
+            preview = (question.get('content') or '')[:50]
+            item.setText(f"Q{i + 1}: {preview}...")
+
+    def move_question_up(self):
+        row = self.selected_list.currentRow()
+        if row <= 0:
+            return
+        item = self.selected_list.takeItem(row)
+        self.selected_list.insertItem(row - 1, item)
+        self.selected_list.setCurrentRow(row - 1)
+        self._refresh_selected_labels()
+
+    def move_question_down(self):
+        row = self.selected_list.currentRow()
+        if row < 0 or row >= self.selected_list.count() - 1:
+            return
+        item = self.selected_list.takeItem(row)
+        self.selected_list.insertItem(row + 1, item)
+        self.selected_list.setCurrentRow(row + 1)
+        self._refresh_selected_labels()
     
     def save_test(self):
         """Save test."""

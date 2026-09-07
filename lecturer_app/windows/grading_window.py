@@ -73,8 +73,7 @@ class GradingWindow(QWidget):
         """Load submissions."""
         try:
             self.submissions = self.api_client.get_submissions()
-            # Filter to only submitted/graded
-            self.submissions = [s for s in self.submissions if s.get('status') in ['submitted', 'graded']]
+            self.submissions = [s for s in self.submissions if s.get('status') in ['in_progress', 'submitted', 'graded']]
             self.populate_table()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load submissions: {str(e)}")
@@ -89,10 +88,37 @@ class GradingWindow(QWidget):
             self.table.setItem(row, 2, QTableWidgetItem(submission.get('username', 'Unknown')))
             self.table.setItem(row, 3, QTableWidgetItem(submission.get('status', 'Unknown')))
             
-            # Actions
-            grade_btn = QPushButton("Grade")
-            grade_btn.clicked.connect(lambda checked, s=submission: self.grade_submission_dialog(s))
-            self.table.setCellWidget(row, 4, grade_btn)
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout()
+            actions_layout.setContentsMargins(0, 0, 0, 0)
+            if submission.get('status') != 'in_progress':
+                grade_btn = QPushButton("Grade")
+                grade_btn.clicked.connect(lambda checked, s=submission: self.grade_submission_dialog(s))
+                actions_layout.addWidget(grade_btn)
+            reset_btn = QPushButton("Reset")
+            reset_btn.clicked.connect(lambda checked, s=submission: self.reset_submission(s))
+            actions_layout.addWidget(reset_btn)
+            actions_widget.setLayout(actions_layout)
+            self.table.setCellWidget(row, 4, actions_widget)
+    
+    def reset_submission(self, submission):
+        """Allow student to retake by deleting their submission."""
+        reply = QMessageBox.question(
+            self,
+            "Reset submission",
+            f"Reset submission for {submission.get('username', 'student')} on "
+            f"'{submission.get('test_name', 'test')}'?\n\n"
+            "All answers and grades will be deleted. The student can start again if the test is available.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            self.api_client.reset_submission(submission['id'])
+            QMessageBox.information(self, "Success", "Submission reset. The student can retake the test.")
+            self.load_submissions()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to reset submission: {str(e)}")
     
     def grade_submission(self, row, col):
         """Grade submission (double-click)."""

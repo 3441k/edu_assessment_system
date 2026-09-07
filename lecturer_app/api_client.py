@@ -65,6 +65,11 @@ class LecturerAPIClient(APIClient):
     def delete_test(self, test_id):
         """Delete a test."""
         return self._make_request('DELETE', f"{API_BASE}/tests/{test_id}")
+
+    def copy_test(self, test_id, name=None):
+        """Duplicate a test."""
+        data = {'name': name} if name else {}
+        return self._make_request('POST', f"{API_BASE}/tests/{test_id}/copy", data)
     
     # Submissions & Grading
     def get_submissions(self, test_id=None):
@@ -73,6 +78,10 @@ class LecturerAPIClient(APIClient):
         if test_id:
             params['test_id'] = test_id
         return self._make_request('GET', f"{API_BASE}/submissions", params)
+
+    def reset_submission(self, submission_id):
+        """Reset a submission so the student can retake the test."""
+        return self._make_request('POST', f"{API_BASE}/submissions/{submission_id}/reset")
     
     def get_submission_for_grading(self, submission_id):
         """Get submission details for grading."""

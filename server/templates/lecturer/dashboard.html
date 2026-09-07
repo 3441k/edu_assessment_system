@@ -19,6 +19,7 @@
     .stats-toolbar .form-select, .stats-toolbar .form-control { min-width: 140px; }
     .stats-score-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
     .stats-score-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #667eea, #764ba2); }
+    .test-question-picker { max-height: 220px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.5rem; background: #fff; }
 </style>
 {% endblock %}
 
@@ -243,8 +244,18 @@
                     </div>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Select Questions (check to include, order matters)</label>
-                    <div id="testQuestionsList" style="max-height: 250px; overflow-y: auto;"></div>
+                    <label class="form-label">Questions</label>
+                    <p class="text-muted small mb-2">Add questions from the bank, then use ↑ ↓ to set the order students will see (top = first).</p>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="small fw-semibold mb-1">Question bank</div>
+                            <div id="testQuestionsAvailable" class="test-question-picker"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="small fw-semibold mb-1">Test order</div>
+                            <div id="testQuestionsSelected" class="test-question-picker"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
