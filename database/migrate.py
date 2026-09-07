@@ -30,6 +30,18 @@ def _table_exists(cursor, table):
     return cursor.fetchone() is not None
 
 
+def _apply_sqlite_pragmas(db_path):
+    """PRAGMA journal_mode/synchronous must run outside an explicit transaction."""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.isolation_level = None
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        conn.close()
+
+
 def run_migrations():
     db_dir = os.path.dirname(DATABASE_PATH)
     if db_dir and not os.path.exists(db_dir):
@@ -63,13 +75,10 @@ def run_migrations():
             "UPDATE users SET role = 'admin' WHERE username = 'admin' AND role = 'lecturer'"
         )
 
-    # WAL mode: better concurrent reads/writes for multiple students (auto-save, submit)
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-
     conn.commit()
     conn.close()
+
+    _apply_sqlite_pragmas(DATABASE_PATH)
 
     # Create any new tables (live_sessions, etc.)
     sys_path = str(Path(__file__).parent.parent)

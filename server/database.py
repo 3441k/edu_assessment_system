@@ -38,6 +38,7 @@ db_session = scoped_session(sessionmaker(bind=engine))
 try:
     from database.migrate import run_migrations
     run_migrations()
-except Exception:
-    pass
+except Exception as exc:
+    import sys
+    print(f"Warning: database migration failed: {exc}", file=sys.stderr)
 
