@@ -15,8 +15,10 @@ QUESTION_TYPES = [
 ]
 
 # User Roles
+ROLE_ADMIN = "admin"
 ROLE_LECTURER = "lecturer"
 ROLE_STUDENT = "student"
+STAFF_ROLES = (ROLE_ADMIN, ROLE_LECTURER)
 
 # Submission Status
 SUBMISSION_STATUS_NOT_STARTED = "not_started"
@@ -40,6 +42,7 @@ API_SUBMISSIONS = f"{API_BASE}/submissions"
 API_GRADING = f"{API_BASE}/grading"
 API_STATISTICS = f"{API_BASE}/statistics"
 API_STUDENTS = f"{API_BASE}/students"
+API_STAFF = f"{API_BASE}/staff"
 API_GROUPS = f"{API_BASE}/groups"
 API_TOPICS = f"{API_BASE}/topics"
 

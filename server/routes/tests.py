@@ -12,21 +12,11 @@ from server.services.live_session import (
 )
 from shared.question_utils import get_answer_types, question_has_type
 from shared.constants import TEST_MODE_SCHEDULED, TEST_MODE_LIVE, API_TESTS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED
+from server.auth_helpers import is_staff, require_staff_api as require_lecturer
 from datetime import datetime
 
 
-def require_lecturer():
-    """Check if user is a lecturer."""
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-    
-    from server.models import User
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-    
-    return user, None, None
+bp = Blueprint('tests', __name__, url_prefix=API_TESTS)
 
 
 def _parse_datetime(value):
@@ -104,9 +94,6 @@ def _duplicate_test(source, name):
             points=tq.points,
         ))
     return copy
-
-
-bp = Blueprint('tests', __name__, url_prefix=API_TESTS)
 
 
 def _student_test_extras(test, user):
@@ -191,7 +178,7 @@ def get_tests():
         
         if user and user.role == 'student':
             test_data.update(_student_test_extras(test, user))
-        elif user and user.role == 'lecturer' and test.test_mode == TEST_MODE_LIVE:
+        elif user and is_staff(user) and test.test_mode == TEST_MODE_LIVE:
             live_session = get_active_live_session(test, db_session)
             test_data.update(live_session_info(live_session))
         

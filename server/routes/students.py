@@ -8,19 +8,9 @@ import bcrypt
 import csv
 import io
 
+from server.auth_helpers import require_staff_api as require_lecturer
+
 bp = Blueprint('students', __name__, url_prefix=API_STUDENTS)
-
-
-def require_lecturer():
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-
-    return user, None, None
 
 
 def _resolve_group_id(raw):

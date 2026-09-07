@@ -6,23 +6,11 @@ from server.models import Question, Topic
 from shared.constants import API_QUESTIONS, QUESTION_TYPES
 from shared.question_utils import get_answer_types, normalize_answer_types, format_type_label
 
+from server.auth_helpers import require_staff_api as require_lecturer
+
 bp = Blueprint('questions', __name__, url_prefix=API_QUESTIONS)
 
 MAX_IMAGE_DATA_LEN = 4_000_000  # ~3 MB as base64 data URL
-
-
-def require_lecturer():
-    """Check if user is a lecturer."""
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-
-    from server.models import User
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-
-    return user, None, None
 
 
 def _validate_image_data(image_data):

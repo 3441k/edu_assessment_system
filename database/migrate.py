@@ -57,6 +57,12 @@ def run_migrations():
     if _table_exists(cursor, "questions") and not _column_exists(cursor, "questions", "image_data"):
         cursor.execute("ALTER TABLE questions ADD COLUMN image_data TEXT")
 
+    # Promote legacy default admin user from lecturer to admin role
+    if _table_exists(cursor, "users"):
+        cursor.execute(
+            "UPDATE users SET role = 'admin' WHERE username = 'admin' AND role = 'lecturer'"
+        )
+
     # WAL mode: better concurrent reads/writes for multiple students (auto-save, submit)
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA busy_timeout=30000")

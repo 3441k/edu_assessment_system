@@ -7,22 +7,25 @@ All lecturer web and desktop interfaces consume the same REST API. Web pages use
 ### Authentication (`/api/v1/auth`)
 - `POST /login` - Login with username and password
 - `POST /logout` - Logout current user
-- `GET /me` - Get current user info
-- `GET /debug_session` - Debug session info (development)
+- `GET /me` - Get current user info (includes `role`: `admin`, `lecturer`, or `student`)
+- `POST /change-password` - Change own password (admin only). Body: `{"current_password": "...", "new_password": "..."}`
+- `POST /register` - Register new student (staff only: lecturer or admin)
+
+Staff-only endpoints use `server/auth_helpers.py`: `require_staff_api()` accepts `admin` or `lecturer`; `require_admin_api()` is admin-only.
 
 ### Topics (`/api/v1/topics`)
 - `GET /` - Get all topics
 - `GET /<id>` - Get topic by ID
-- `POST /` - Create topic (lecturer only)
-- `PUT /<id>` - Update topic (lecturer only)
-- `DELETE /<id>` - Delete topic (lecturer only)
+- `POST /` - Create topic (staff only)
+- `PUT /<id>` - Update topic (staff only)
+- `DELETE /<id>` - Delete topic (staff only)
 
 ### Questions (`/api/v1/questions`)
 - `GET /` - Get all questions (optionally filtered by topic_id)
 - `GET /<id>` - Get question by ID
-- `POST /` - Create question (lecturer only)
-- `PUT /<id>` - Update question (lecturer only)
-- `DELETE /<id>` - Delete question (lecturer only)
+- `POST /` - Create question (staff only)
+- `PUT /<id>` - Update question (staff only)
+- `DELETE /<id>` - Delete question (staff only)
 
 Question payloads include `answer_types`: an ordered array of one or more of `multiple_choice`, `text`, `code`, `diagram`. When multiple types are selected, `type` is stored as `composite`. Helpers live in `shared/question_utils.py`.
 
@@ -31,9 +34,10 @@ For combined multiple choice + text on one question, the student's `answer_text`
 ### Tests (`/api/v1/tests`)
 - `GET /` - Get all tests
 - `GET /<id>` - Get test with questions
-- `POST /` - Create test (lecturer only)
-- `PUT /<id>` - Update test (lecturer only)
-- `DELETE /<id>` - Delete test (lecturer only)
+- `POST /` - Create test (staff only)
+- `PUT /<id>` - Update test (staff only)
+- `DELETE /<id>` - Delete test (staff only)
+- `POST /<id>/copy` - Duplicate test (settings + question links; optional body `{"name": "..."}`). Does not copy submissions (staff only)
 
 Test payloads include `test_mode` (`scheduled` or `live`), `time_limit`, `attempts_allowed`, `available_from`, and `available_until`. List/detail responses also include timing fields (`availability_status`, `live_status`, `seconds_remaining`, etc.) computed by `server/services/test_schedule.py`. Student list responses add `can_view_results` and `results_ready` so graded results stay accessible after scheduled windows close.
 
@@ -41,9 +45,9 @@ Test payloads include `test_mode` (`scheduled` or `live`), `time_limit`, `attemp
 Implemented in `server/routes/live.py`. Only applies to tests with `test_mode=live`.
 
 - `GET /status` - Get current live session status (authenticated users)
-- `POST /start` - Start a live session (lecturer only). Body: `{"duration_minutes": 60}`
-- `POST /extend` - Extend active session (lecturer only). Body: `{"minutes": 10}`
-- `POST /end` - End active session early (lecturer only)
+- `POST /start` - Start a live session (staff only). Body: `{"duration_minutes": 60}`
+- `POST /extend` - Extend active session (staff only). Body: `{"minutes": 10}`
+- `POST /end` - End active session early (staff only)
 
 When a live session ends (naturally, by extend/end, or on expiry), all in-progress submissions for that session are auto-submitted.
 
@@ -53,40 +57,51 @@ When a live session ends (naturally, by extend/end, or on expiry), all in-progre
 - `POST /` - Create new submission (blocked if test unavailable or live session not active)
 - `POST /<id>/answers` - Save answer for a question
 - `POST /<id>/submit` - Submit test
+- `POST /<id>/reset` - Delete submission and grades so the student can retake (staff only)
 
 For students, `GET /<id>` on a submitted or graded submission returns a results payload: `grade`, `questions` (with content, answers, scores, feedback), `results_ready`, and `can_view_results`. Students do not use the lecturer grading API to view their own results.
 
 Submission endpoints call `auto_submit_if_expired()` from `test_schedule.py` to finalize timed-out in-progress submissions before serving or mutating data. The submit endpoint is idempotent: if a submission was already auto-submitted, it returns 200 instead of an error.
 
 ### Grading (`/api/v1/grading`)
-- `GET /submissions/<id>` - Get submission for grading (lecturer only). Creates placeholder `Answer` rows for unanswered questions.
-- `PUT /answers/<id>` - Grade an answer (lecturer only). Score must be a number from 0 to the question maximum.
-- `POST /submissions/<id>/finalize` - Finalize grading (lecturer only)
+- `GET /submissions/<id>` - Get submission for grading (staff only). Creates placeholder `Answer` rows for unanswered questions.
+- `PUT /answers/<id>` - Grade an answer (staff only). Score must be a number from 0 to the question maximum.
+- `POST /submissions/<id>/finalize` - Finalize grading (staff only)
 
 ### Statistics (`/api/v1/statistics`)
 - `GET /overview` - Class overview: totals, test summaries, focus-test distribution, weak topics. Query: `test_id` (optional focus test).
-- `GET /topics` - Per-topic averages and submission counts (lecturer only)
+- `GET /topics` - Per-topic averages and submission counts (staff only)
 - `GET /tests` - Test list with summary stats. Query: `q` (search), `mode` (`scheduled`|`live`), `status` (`all`|`has_submissions`|`graded`|`pending`), `sort` (`date`|`name`|`avg_score`)
-- `GET /tests/<id>` - Test detail: score distribution, question stats, student results with submission IDs (lecturer only)
+- `GET /tests/<id>` - Test detail: score distribution, question stats, student results with submission IDs (staff only)
 - `GET /students` - Student list with averages. Query: `q` (search username or student ID)
-- `GET /students/<id>` - Student detail: tests taken, grades, trend chart data (lecturer only)
-- `GET /students/<id>/tests/<test_id>` - Per-question score summary for one student on one test (lecturer only)
+- `GET /students/<id>` - Student detail: tests taken, grades, trend chart data (staff only)
+- `GET /students/<id>/tests/<test_id>` - Per-question score summary for one student on one test (staff only)
 - `GET /groups/compare` - Cross-group comparison: matrix, bar chart data, per-group distributions. Query: `test_id` (optional, for distribution chart)
 - All statistics list/detail endpoints accept optional `group_id` query (`0` = Unassigned students only)
 
 ### Groups (`/api/v1/groups`)
 - `GET /` - List groups with student counts and average graded %; includes virtual **Unassigned** row when applicable
-- `POST /` - Create group (lecturer only)
+- `POST /` - Create group (staff only)
 - `GET /<id>` - Group detail with student list (`id=0` for Unassigned)
-- `PUT /<id>` - Update group name/description (lecturer only)
-- `DELETE /<id>` - Delete group; students move to Unassigned (lecturer only)
+- `PUT /<id>` - Update group name/description (staff only)
+- `DELETE /<id>` - Delete group; students move to Unassigned (staff only)
 
 ### Students (`/api/v1/students`)
-- `GET /` - Get all students (lecturer only). Query: `group_id` (`0` = unassigned)
-- `POST /` - Create student with optional `group_id` (lecturer only)
-- `POST /import` - Import students from CSV; optional `group` column creates groups (lecturer only)
-- `PUT /<id>` - Update student including `group_id` (lecturer only)
-- `DELETE /<id>` - Delete student (lecturer only)
+- `GET /` - Get all students (staff only). Query: `group_id` (`0` = unassigned)
+- `POST /` - Create student with optional `group_id` (staff only)
+- `POST /import` - Import students from CSV; optional `group` column creates groups (staff only)
+- `PUT /<id>` - Update student including `group_id` (staff only)
+- `DELETE /<id>` - Delete student (staff only)
+
+### Staff (`/api/v1/staff`) — admin only
+Implemented in `server/routes/staff.py`.
+
+- `GET /` - List lecturer and administrator accounts
+- `POST /` - Create staff account. Body: `{"username": "...", "password": "...", "role": "lecturer"|"admin"}`
+- `PUT /<id>` - Update username, password (optional), and/or role
+- `DELETE /<id>` - Delete staff account (cannot delete self or last admin)
+
+Administrators manage lecturer passwords via this API; lecturers cannot change their own password in the web UI.
 
 ## Web Interface Routes
 
@@ -110,28 +125,31 @@ Implemented in `server/routes/web.py`. Uses `require_student()` to block lecture
 
 | Route | Description |
 |-------|-------------|
-| `GET /lecturer/login` | Lecturer login page |
-| `GET /lecturer/logout` | Logout and redirect to lecturer login |
-| `GET /lecturer/dashboard` | Main control panel with tabs (lecturer role required) |
-| `GET /lecturer/grading/<submission_id>` | Grade a specific submission (lecturer role required) |
+| `GET /lecturer/login` | Staff login page (lecturer or admin) |
+| `GET /lecturer/logout` | Logout and redirect to staff login |
+| `GET /lecturer/dashboard` | Main control panel with tabs (staff role required) |
+| `GET /lecturer/grading/<submission_id>` | Grade a specific submission (staff role required) |
 
-Implemented in `server/routes/lecturer_web.py`. Uses `require_lecturer()` for protected pages.
+Implemented in `server/routes/lecturer_web.py`. Uses `require_staff_web()` for protected pages (`admin` or `lecturer`).
 
 ### Lecturer Dashboard Tabs
 
-The dashboard (`server/templates/lecturer/dashboard.html`) provides seven tabs, each calling the REST API via `server/static/js/lecturer.js`:
+The dashboard (`server/templates/lecturer/dashboard.html`) provides eight tabs (Staff is admin-only), each calling the REST API via `server/static/js/lecturer.js`:
 
-1. **Question Bank** — list/filter questions, manage topics, add/edit/delete questions with one or more answer types
-2. **Tests** — list tests, create/edit tests with question selection, set test mode (scheduled vs live), availability window, and time limit; for live tests, use Go Live / Extend / End controls
-3. **Grading** — list submitted/graded submissions, link to grading page
+1. **Question Bank** — list/filter questions, manage topics, add/edit/delete questions with one or more answer types and optional images
+2. **Tests** — list tests, create/edit with ordered question picker (↑ ↓), **Copy** test, set test mode (scheduled vs live), availability window, and time limit; for live tests, use Go Live / Extend / End controls
+3. **Grading** — list submitted/graded submissions, link to grading page, **Reset submission** for retakes
 4. **Statistics** — class overview with Chart.js; group filter on all views; **Compare groups** (matrix, bar chart, distributions); browse tests/students with search/filters; drill-down to test/student score summaries; links to grading
 5. **Groups** — create/edit/delete groups, view members, jump to group statistics
 6. **Students** — list/filter by group, add/edit with group assignment, CSV import with `group` column, delete
+7. **Staff** (admin only) — create/edit/delete lecturer and admin accounts, reset passwords, toggle admin role via dropdown
+
+Administrators also see a **Change password** button (top-right) to update their own password.
 
 ### Role Separation
 
-- Student login (`/login`) rejects users with `role=lecturer` and links to `/lecturer/login`
-- Lecturer login (`/lecturer/login`) rejects users with `role=student` and links to `/login`
+- Student login (`/login`) rejects staff users and links to `/lecturer/login`
+- Staff login (`/lecturer/login`) accepts `role=lecturer` or `role=admin`; rejects students and links to `/login`
 - Both share the same `/api/v1/auth/login` endpoint; role is checked client-side and in route guards
 
 ## Test Scheduling and Live Control
@@ -171,7 +189,10 @@ Each test has a `test_mode`: `scheduled` (default) or `live`. Logic lives in `se
 | `tests.test_mode` | Scheduled vs live test mode |
 | `submissions.live_session_id` | Link attempts to live sessions |
 | `questions.answer_types` | JSON array of combined answer components |
+| `users.group_id` | Student group assignment |
+| `questions.image_data` | Optional base64 data URL image on questions |
 | `live_sessions` table | Lecturer-controlled live windows |
+| `users.role = admin` | Promote legacy `admin`/`lecturer` default user to administrator |
 
 ## Database Schema
 
@@ -181,7 +202,7 @@ CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL,  -- 'lecturer' or 'student'
+    role VARCHAR(20) NOT NULL,  -- 'admin', 'lecturer', or 'student'
     student_id VARCHAR(50) UNIQUE,  -- Only for students
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -385,7 +406,7 @@ app.config['SESSION_COOKIE_NAME'] = 'assessment_session'
 
 ### Session Data
 - `user_id`: Current user's ID
-- `role`: User's role ('lecturer' or 'student')
+- `role`: User's role (`admin`, `lecturer`, or `student`)
 - `username`: Username for display
 
 ### Desktop App Session Handling

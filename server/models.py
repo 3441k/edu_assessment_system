@@ -22,7 +22,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False)  # 'lecturer' or 'student'
+    role = Column(String(20), nullable=False)  # 'admin', 'lecturer', or 'student'
     student_id = Column(String(50), unique=True, nullable=True)  # Only for students
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

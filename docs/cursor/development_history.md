@@ -261,6 +261,35 @@
 - `run_server_production.py`, `requirements.txt`, `server/database.py`, `database/migrate.py`
 - `README.md`, `QUICKSTART.md`, `docs/cursor/*`
 
+## Feature: Test Copy, Ordering, Reset, and Multiline Questions
+
+**Date**: September 2026
+
+**Implementation**:
+- `POST /api/v1/tests/<id>/copy` duplicates test settings and question links
+- Web test editor: question bank + ordered list with ↑ ↓; desktop test editor: Move Up/Down
+- `POST /api/v1/submissions/<id>/reset` deletes submission/grades for retakes (staff only)
+- Question text rendered with `white-space: pre-wrap` in test-taking, grading, and results
+
+**Files Changed**: `server/routes/tests.py`, `server/routes/submissions.py`, `server/static/js/lecturer.js`, `server/templates/*`, `lecturer_app/*`
+
+## Feature: Administrator Role and Staff Tab
+
+**Date**: September 2026
+**Request**: Admin layer with Staff tab; only admins manage lecturers and passwords; admins can grant admin to others
+
+**Implementation**:
+- Added `ROLE_ADMIN`, `STAFF_ROLES`, and `server/auth_helpers.py` (`require_staff_api`, `require_admin_api`)
+- Staff API in `server/routes/staff.py`; change-password in `server/routes/auth.py`
+- Staff tab + Change password UI in lecturer dashboard (admin only)
+- Migration promotes legacy `username=admin` from `lecturer` to `admin` role
+- All teaching endpoints accept both `admin` and `lecturer`
+
+**Files Changed**:
+- `shared/constants.py`, `server/auth_helpers.py`, `server/routes/staff.py`, `server/routes/auth.py`
+- Route guards across API modules; `server/templates/lecturer/*`, `server/static/js/lecturer.js`
+- `database/init_db.py`, `database/migrate.py`, `README.md`, `QUICKSTART.md`, `docs/cursor/*`
+
 ## UI/UX Improvements
 
 ### Login Window Redesign
@@ -319,6 +348,8 @@
 - [x] Student results viewing for graded scheduled and live tests
 - [x] Lecturer web statistics redesign (overview charts, filters, drill-down, grading links)
 - [x] Student groups (Groups tab, CSV import, compare groups in statistics)
+- [x] Test copy, question ordering, submission reset, multiline question display
+- [x] Administrator role, Staff tab, and admin password change
 
 ### Known Limitations
 - Code execution sandbox could be more secure
@@ -326,6 +357,7 @@
 - Limited diagram editing (web only)
 - Statistics calculations could be optimized
 - No automated test suite (manual testing only)
+- Lecturers cannot change their own password in the web UI (admin resets via Staff tab)
 
 ## Future Improvements
 

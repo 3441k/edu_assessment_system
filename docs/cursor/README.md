@@ -60,6 +60,9 @@ This folder contains comprehensive documentation about the Educational Assessmen
 **Understanding question formats**:
 → See `implementation_details.md` → Question Type Formats section
 
+**Managing staff accounts (administrators)**:
+→ See `implementation_details.md` → Staff API and Lecturer Dashboard Tabs (Staff)
+
 **Using the lecturer web interface**:
 → See `implementation_details.md` → Web Interface Routes → Lecturer Web section
 

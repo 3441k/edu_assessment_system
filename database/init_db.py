@@ -12,7 +12,7 @@ import shared.sqlite_compat  # noqa: F401, E402 — before SQLAlchemy/sqlite3
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from server.models import Base, User, Topic
-from shared.constants import ROLE_LECTURER, ROLE_STUDENT
+from shared.constants import ROLE_ADMIN, ROLE_STUDENT
 import bcrypt
 from dotenv import load_dotenv
 
@@ -43,14 +43,14 @@ def init_database():
             print("Database already initialized.")
             return
         
-        # Create default lecturer account (password: admin)
+        # Create default administrator account (password: admin)
         password_hash = bcrypt.hashpw("admin".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        lecturer = User(
+        admin = User(
             username="admin",
             password_hash=password_hash,
-            role=ROLE_LECTURER
+            role=ROLE_ADMIN
         )
-        session.add(lecturer)
+        session.add(admin)
         
         # Create a default topic
         default_topic = Topic(
@@ -61,9 +61,10 @@ def init_database():
         
         session.commit()
         print(f"Database initialized successfully at {DATABASE_PATH}")
-        print("Default lecturer account created:")
+        print("Default administrator account created:")
         print("  Username: admin")
         print("  Password: admin")
+        print("  Role: admin (full access + Staff tab)")
         print("  (Please change the password after first login)")
         
     except Exception as e:

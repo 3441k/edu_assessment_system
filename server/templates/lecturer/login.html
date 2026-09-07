@@ -59,10 +59,10 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         const data = await response.json();
 
         if (response.ok) {
-            if (data.user && data.user.role === 'lecturer') {
+            if (data.user && (data.user.role === 'lecturer' || data.user.role === 'admin')) {
                 setTimeout(() => { window.location.href = '/lecturer/dashboard'; }, 100);
             } else {
-                errorDiv.textContent = 'This login page is for lecturers only.';
+                errorDiv.textContent = 'This login page is for lecturers and administrators only.';
                 errorDiv.style.display = 'block';
                 fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
             }

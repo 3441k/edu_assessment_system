@@ -10,18 +10,9 @@ from server.services.live_session import (
 )
 from shared.constants import API_TESTS, TEST_MODE_LIVE
 
+from server.auth_helpers import require_staff_api as _require_lecturer
+
 bp = Blueprint('live', __name__, url_prefix=API_TESTS)
-
-
-def _require_lecturer():
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-    from server.models import User
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-    return user, None, None
 
 
 def _get_live_test(test_id):

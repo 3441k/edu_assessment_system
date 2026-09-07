@@ -122,6 +122,21 @@ Create a GUI-based tool to help lecturers check student knowledge. The system sh
 - [x] Statistics group filter and **Compare groups** view (matrix, charts, Unassigned as separate row)
 - [x] Fix lecturer dashboard JS syntax error that blocked tab loading
 
+### Phase 10: Test & Question Workflow
+- [x] Copy test API and UI (duplicate settings + questions, no submissions)
+- [x] Question order picker when building tests (web + desktop)
+- [x] Reset submission for student retakes (staff only)
+- [x] Preserve question newlines in test-taking, grading, and results views
+- [x] Optional question image attachments (web question bank, student test, grading, results)
+
+### Phase 11: Administrator Role and Staff Management
+- [x] `ROLE_ADMIN` separate from `ROLE_LECTURER`; shared `server/auth_helpers.py`
+- [x] Staff API (`/api/v1/staff`) — admin-only CRUD for lecturer/admin accounts
+- [x] Admin **Change password** endpoint and dashboard button
+- [x] **Staff** tab on lecturer web dashboard (visible to admins only)
+- [x] Promote/demote admin privileges; migration upgrades legacy `admin` user from lecturer to admin role
+- [x] Lecturers retain full teaching workflow; only admins manage staff passwords and accounts
+
 ## File Structure
 
 ```
@@ -214,7 +229,7 @@ edu_assessment_system/
 
 - Session-based authentication using Flask sessions
 - Bcrypt for password hashing
-- Role-based access control (lecturer vs student)
+- Role-based access control (`admin`, `lecturer`, `student`)
 - CORS enabled for desktop applications
 
 ### Code Execution
@@ -286,7 +301,10 @@ CODE_EXECUTION_MEMORY_LIMIT=128
 After database initialization:
 - Username: `admin`
 - Password: `admin`
-- **Important**: Change password after first login!
+- Role: **admin** (full lecturer access + Staff tab)
+- **Important**: Change password after first login (Change password button on dashboard)
+
+**Roles:** `admin` (manage staff + all lecturer features), `lecturer` (teaching workflow only), `student` (take tests).
 
 ## Dependencies
 

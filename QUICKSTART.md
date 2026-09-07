@@ -18,10 +18,11 @@ pip install -r requirements.txt
 python database/init_db.py
 ```
 
-This creates the database with a default lecturer account:
+This creates the database with a default **administrator** account:
 - Username: `admin`
 - Password: `admin`
-- **Change this password after first login!**
+- Role: admin (full access + **Staff** tab to manage lecturer accounts)
+- **Change this password after first login** (Change password button on the dashboard)
 
 ## Running the System
 
@@ -79,7 +80,11 @@ Or from another device on the local network:
 http://<server-ip>:5000/lecturer/login
 ```
 
-Login with the default credentials (admin/admin) or your lecturer account.
+Login with the default credentials (admin/admin) or your staff account (lecturer or administrator).
+
+**Administrators** see an extra **Staff** tab and a **Change password** button on the dashboard. Use Staff to add lecturers, reset their passwords, promote/demote admin privileges, or delete accounts. Lecturers cannot manage other staff accounts.
+
+After first login as admin, change the default password immediately (**Change password** button, top-right of dashboard).
 
 **Option B — Desktop app (optional):**
 
@@ -133,13 +138,14 @@ Use either the **web interface** (`/lecturer/login`) or the **desktop app** (`le
 
 1. **Manage Topics**: Create topics to organize questions
 2. **Question Bank**: Add questions; select one or more answer types per question (multiple choice, text, code, diagram)
-3. **Create Tests**: Combine questions from the question bank into tests
+3. **Create Tests**: Combine questions from the question bank into tests; use ↑ ↓ to set question order; **Copy** duplicates a test (settings + questions, no submissions)
 4. **Student Management**: Add students manually or import from CSV; assign each student to one **group** (or leave Unassigned)
 5. **Groups**: Create and manage student groups on the **Groups** tab; view group members and average grades
-6. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize
+6. **Grading**: Open a submission, score each answer (0 to the question maximum), add feedback, then finalize; **Reset submission** lets a student retake if attempts allow
 7. **Statistics**: Class overview charts, filter by group, **Compare groups** view, drill-down to test/student score summaries
+8. **Staff** (administrators only): Manage lecturer and admin accounts, reset staff passwords, grant or revoke admin role
 
-When creating questions on the web **Question Bank** tab, check one or more **answer types** to combine components on a single question (e.g. written answer + diagram).
+When creating questions on the web **Question Bank** tab, check one or more **answer types** to combine components on a single question (e.g. written answer + diagram). You can attach an optional **image** (PNG/JPEG/GIF/WebP, max 3 MB). Question text preserves line breaks during tests and grading.
 
 #### Test modes
 

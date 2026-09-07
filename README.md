@@ -14,6 +14,9 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 - **Auto & Manual Grading**: Automatic code execution with test cases, manual grading for all question types
 - **Student Results**: Graded submissions show scores and feedback on the dashboard; available after the test window closes for scheduled tests
 - **Statistics & Analytics** (lecturer web): Class overview with Chart.js charts, test focus picker, weak-topic highlights, searchable test/student lists with filters, drill-down score summaries, **student groups** with cross-group comparison, and one-click links to grading
+- **Staff & roles**: Administrator accounts with **Staff** tab to create lecturers, reset passwords, and grant admin privileges; lecturers retain full teaching workflow access
+- **Test utilities**: Copy tests, reorder questions when building tests, reset student submissions for retakes
+- **Question images**: Optional image attachments on questions (web question bank, student test, grading, results)
 - **Export**: CSV grades export and PDF report generation
 
 ## Architecture
@@ -144,10 +147,15 @@ Ensure the **server** is started with `run_server.py` or `run_server_production.
 
 ## Default Credentials
 
-After initialization, a default lecturer account is created:
+After initialization, a default administrator account is created:
 - Username: `admin`
 - Password: `admin`
-- **Change this password after first login!**
+- Role: **admin** (full lecturer access plus **Staff** tab for managing accounts)
+- **Change this password after first login** (Change password button on the dashboard)
+
+**Roles:**
+- **Administrator** — everything a lecturer can do, plus Staff tab (create/edit/delete lecturers, reset passwords, grant admin privileges)
+- **Lecturer** — question bank, tests, grading, statistics, groups, students (cannot manage other staff accounts)
 
 ## License
 

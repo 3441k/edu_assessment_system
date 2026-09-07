@@ -5,19 +5,9 @@ from server.database import db_session
 from server.models import User, Group, Grade, Submission
 from shared.constants import API_GROUPS, GROUP_UNASSIGNED_ID, ROLE_STUDENT
 
+from server.auth_helpers import require_staff_api as require_lecturer
+
 bp = Blueprint('groups', __name__, url_prefix=API_GROUPS)
-
-
-def require_lecturer():
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can manage groups"}), 403
-
-    return user, None, None
 
 
 def _group_average_percentage(student_ids):

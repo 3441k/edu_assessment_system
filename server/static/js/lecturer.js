@@ -19,7 +19,16 @@ const LecturerUI = {
     _questionImageData: null,
     _questionImageRemoved: false,
     _testSelectedQuestionIds: [],
+    currentUser: null,
     GROUP_CHART_COLORS: ['#667eea', '#764ba2', '#20c997', '#f0ad4e', '#dc3545', '#6c757d', '#0dcaf0', '#fd7e14'],
+
+    isStaffRole(role) {
+        return role === 'lecturer' || role === 'admin';
+    },
+
+    isAdminRole(role) {
+        return role === 'admin';
+    },
 
     async api(method, endpoint, data) {
         const opts = { method, credentials: 'include', headers: {} };
@@ -70,7 +79,14 @@ const LecturerUI = {
     async init() {
         try {
             const me = await this.api('GET', '/api/v1/auth/me');
-            if (me.role !== 'lecturer') { window.location.href = '/lecturer/login'; return; }
+            if (!this.isStaffRole(me.role)) { window.location.href = '/lecturer/login'; return; }
+            this.currentUser = me;
+            if (this.isAdminRole(me.role)) {
+                var staffTabItem = document.getElementById('staffTabItem');
+                var changePasswordBtn = document.getElementById('changePasswordBtn');
+                if (staffTabItem) staffTabItem.style.display = '';
+                if (changePasswordBtn) changePasswordBtn.style.display = '';
+            }
         } catch (e) {
             window.location.href = '/lecturer/login';
             return;
@@ -98,6 +114,8 @@ const LecturerUI = {
         if (groupsTab) groupsTab.addEventListener('shown.bs.tab', () => this.loadGroups());
         var studentsTab = document.querySelector('[data-bs-target="#studentsTab"]');
         if (studentsTab) studentsTab.addEventListener('shown.bs.tab', () => this.loadStudents());
+        var staffTab = document.querySelector('[data-bs-target="#staffTab"]');
+        if (staffTab) staffTab.addEventListener('shown.bs.tab', () => this.loadStaff());
         await this.loadGroups();
     },
 
@@ -1414,5 +1432,124 @@ const LecturerUI = {
             await this.loadStudents();
         } catch (e) { alert('Error: ' + e.message); }
         input.value = '';
+    },
+
+    roleLabel(role) {
+        if (role === 'admin') return 'Administrator';
+        if (role === 'lecturer') return 'Lecturer';
+        return role;
+    },
+
+    async loadStaff() {
+        try {
+            const staff = await this.api('GET', '/api/v1/staff');
+            const rows = staff.map(s => {
+                const isSelf = this.currentUser && s.id === this.currentUser.id;
+                const roleSelect = `<select class="form-select form-select-sm" style="width:auto;min-width:130px;" onchange="LecturerUI.updateStaffRole(${s.id}, this.value)" ${isSelf ? 'disabled' : ''}>
+                    <option value="lecturer" ${s.role === 'lecturer' ? 'selected' : ''}>Lecturer</option>
+                    <option value="admin" ${s.role === 'admin' ? 'selected' : ''}>Administrator</option>
+                </select>`;
+                return `<tr>
+                    <td>${this.escapeHtml(s.username)}${isSelf ? ' <span class="badge bg-secondary">you</span>' : ''}</td>
+                    <td>${roleSelect}</td>
+                    <td>${this.formatDatetime(s.created_at)}</td>
+                    <td class="table-actions">
+                        <button class="btn btn-sm btn-outline-primary" onclick="LecturerUI.showStaffModal(${s.id})">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="LecturerUI.deleteStaff(${s.id})" ${isSelf ? 'disabled' : ''}>Delete</button>
+                    </td>
+                </tr>`;
+            });
+            document.getElementById('staffTable').innerHTML = this.tableHtml(
+                ['Username', 'Role', 'Created', 'Actions'], rows
+            );
+        } catch (e) {
+            document.getElementById('staffTable').innerHTML = `<div class="alert alert-danger">${this.escapeHtml(e.message)}</div>`;
+        }
+    },
+
+    async showStaffModal(id) {
+        document.getElementById('staffEditId').value = id || '';
+        document.getElementById('staffModalTitle').textContent = id ? 'Edit staff member' : 'Add staff member';
+        document.getElementById('staffPasswordHint').textContent = id ? 'Leave blank to keep current password' : '';
+        document.getElementById('staffPassword').required = !id;
+        if (id) {
+            const staff = await this.api('GET', '/api/v1/staff');
+            const member = staff.find(s => s.id === id);
+            if (!member) return alert('Staff member not found');
+            document.getElementById('staffUsername').value = member.username;
+            document.getElementById('staffPassword').value = '';
+            document.getElementById('staffRole').value = member.role;
+            if (this.currentUser && member.id === this.currentUser.id) {
+                document.getElementById('staffRole').disabled = true;
+            } else {
+                document.getElementById('staffRole').disabled = false;
+            }
+        } else {
+            document.getElementById('staffUsername').value = '';
+            document.getElementById('staffPassword').value = '';
+            document.getElementById('staffRole').value = 'lecturer';
+            document.getElementById('staffRole').disabled = false;
+        }
+        new bootstrap.Modal(document.getElementById('staffModal')).show();
+    },
+
+    async saveStaff() {
+        const id = document.getElementById('staffEditId').value;
+        const username = document.getElementById('staffUsername').value.trim();
+        const password = document.getElementById('staffPassword').value;
+        const role = document.getElementById('staffRole').value;
+        if (!username) return alert('Username required');
+        if (!id && !password) return alert('Password required');
+        try {
+            const payload = { username, role };
+            if (password) payload.password = password;
+            if (id) {
+                await this.api('PUT', `/api/v1/staff/${id}`, payload);
+            } else {
+                payload.password = password;
+                await this.api('POST', '/api/v1/staff', payload);
+            }
+            bootstrap.Modal.getInstance(document.getElementById('staffModal')).hide();
+            await this.loadStaff();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
+    async updateStaffRole(id, role) {
+        try {
+            await this.api('PUT', `/api/v1/staff/${id}`, { role });
+            await this.loadStaff();
+        } catch (e) {
+            alert('Error: ' + e.message);
+            await this.loadStaff();
+        }
+    },
+
+    async deleteStaff(id) {
+        if (!confirm('Delete this staff account?')) return;
+        try {
+            await this.api('DELETE', `/api/v1/staff/${id}`);
+            await this.loadStaff();
+        } catch (e) { alert('Error: ' + e.message); }
+    },
+
+    showChangePasswordModal() {
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+        new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+    },
+
+    async saveChangePassword() {
+        const current_password = document.getElementById('currentPassword').value;
+        const new_password = document.getElementById('newPassword').value;
+        const confirm_password = document.getElementById('confirmPassword').value;
+        if (!current_password || !new_password) return alert('All fields are required');
+        if (new_password !== confirm_password) return alert('New passwords do not match');
+        if (new_password.length < 4) return alert('New password must be at least 4 characters');
+        try {
+            await this.api('POST', '/api/v1/auth/change-password', { current_password, new_password });
+            bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+            alert('Password updated successfully');
+        } catch (e) { alert('Error: ' + e.message); }
     }
 };

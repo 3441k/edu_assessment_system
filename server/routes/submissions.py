@@ -8,23 +8,12 @@ from server.services.test_schedule import (
     auto_submit_if_expired, can_start_test, submission_timing_info
 )
 from server.services.live_session import get_active_live_session
-from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED, TEST_MODE_LIVE, ROLE_LECTURER
+from shared.constants import API_SUBMISSIONS, SUBMISSION_STATUS_IN_PROGRESS, SUBMISSION_STATUS_SUBMITTED, SUBMISSION_STATUS_GRADED, TEST_MODE_LIVE, ROLE_STUDENT
 from datetime import datetime
 
+from server.auth_helpers import require_staff_api as _require_lecturer
+
 bp = Blueprint('submissions', __name__, url_prefix=API_SUBMISSIONS)
-
-
-def _require_lecturer():
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-
-    from server.models import User
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != ROLE_LECTURER:
-        return None, jsonify({"error": "Only lecturers can perform this action"}), 403
-
-    return user, None, None
 
 
 def _student_results_detail(submission):

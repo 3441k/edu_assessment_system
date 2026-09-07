@@ -6,20 +6,9 @@ from server.models import User, Submission, Answer, Grade, Question, Topic, Test
 from shared.constants import API_STATISTICS, SUBMISSION_STATUS_GRADED, GROUP_UNASSIGNED_ID, ROLE_STUDENT
 from sqlalchemy import func
 
+from server.auth_helpers import require_staff_api as require_lecturer
+
 bp = Blueprint('statistics', __name__, url_prefix=API_STATISTICS)
-
-
-def require_lecturer():
-    """Check if user is a lecturer."""
-    user_id = session.get('user_id')
-    if not user_id:
-        return None, jsonify({"error": "Not authenticated"}), 401
-
-    user = db_session.query(User).filter_by(id=user_id).first()
-    if not user or user.role != 'lecturer':
-        return None, jsonify({"error": "Only lecturers can access statistics"}), 403
-
-    return user, None, None
 
 
 def _parse_group_id_param():
