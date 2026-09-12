@@ -14,8 +14,8 @@ ENV/
 *.sqlite
 *.sqlite3
 
-# Environment
-.env
+# Environment — keep secrets local; a sample .env with pool/thread settings is tracked in the repo
+.env.local
 
 # IDE
 .vscode/

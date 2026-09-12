@@ -121,7 +121,7 @@ Open browser and navigate to `http://localhost:5000/login`
 
 ## Configuration
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory (the repo includes a sample you can copy or use as-is):
 
 ```env
 SERVER_HOST=0.0.0.0
