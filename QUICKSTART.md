@@ -219,6 +219,41 @@ student1,password123,STU001,CS-2024-A
 student2,password456,STU002,CS-2024-B
 ```
 
+## Stress testing (~15 users)
+
+Use this to check server/DB behaviour under concurrent students (especially after hybrid autosave).
+
+**1. Prepare**
+
+- Start production server: `./run_server_production.py`
+- Create a test with several questions in the lecturer dashboard (note the test **ID** from the Tests tab or URL)
+- Tune `.env` if needed (`DB_POOL_SIZE`, `SERVER_THREADS`, etc.)
+
+**2. Create test student accounts (once)**
+
+```bash
+python scripts/stress_test.py --test-id 1 --users 15 --create-students \
+  --lecturer-user admin --lecturer-password YOUR_ADMIN_PASSWORD
+```
+
+This creates `stress1` … `stress15` with password `stress123` (override with `--password`).
+
+**3. Run the load test**
+
+```bash
+python scripts/stress_test.py --base-url http://127.0.0.1:5000 --test-id 1 --users 15 --duration 120
+```
+
+Each virtual student logs in, starts the test, saves answers on a hybrid-like schedule, batch-saves, and submits. Summary prints OK/FAIL per user.
+
+**4. What to watch**
+
+- Server terminal: errors, slow responses, `database is locked`
+- Script output: all 15 should show `OK`
+- During test: students using real browsers on the same machine will add more load
+
+For a test on another PC on the LAN, set `--base-url http://<server-ip>:5000`.
+
 ## Troubleshooting
 
 - **Connection errors**: Ensure the Flask server is running before starting desktop applications or using web interfaces

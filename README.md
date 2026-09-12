@@ -7,7 +7,7 @@ A comprehensive tool for lecturers to create, manage, and grade student assessme
 - **Question Types**: Multiple choice, code, diagram, and text — combinable on a single question (e.g. text + diagram, choices + code)
 - **Dual Student Interfaces**: Web-based (browser) and desktop application (PyQt5)
 - **Dual Lecturer Interfaces**: Web-based (browser) and desktop application (PyQt5)
-- **Student Test UX**: One question at a time with Previous/Next, numbered jump navigation, and auto-save
+- **Student Test UX**: One question at a time with Previous/Next, numbered jump navigation, **hybrid autosave** (local browser draft + periodic/server sync on navigation and submit)
 - **Test Management**: Create tests from question bank, configure time limits, attempts, and availability
 - **Scheduled Tests**: Set availability windows and optional per-student duration; auto-submit when time expires
 - **Live Tests**: Lecturer-controlled sessions with Go Live, Extend, and End; global deadline and auto-submit for all students

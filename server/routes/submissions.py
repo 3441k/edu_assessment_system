@@ -104,6 +104,53 @@ def _submission_response(submission, include_answers=False, include_results=Fals
     return data
 
 
+def _upsert_answer(submission_id, submission, question_id, answer_text, code, diagram_data):
+    test_question = db_session.query(TestQuestion).filter_by(
+        test_id=submission.test_id, question_id=question_id
+    ).first()
+    if not test_question:
+        raise ValueError(f"Question {question_id} not found in test")
+
+    answer = db_session.query(Answer).filter_by(
+        submission_id=submission_id, question_id=question_id
+    ).first()
+
+    if answer:
+        answer.answer_text = answer_text
+        answer.code = code
+        answer.diagram_data = diagram_data
+        answer.updated_at = datetime.utcnow()
+    else:
+        answer = Answer(
+            submission_id=submission_id,
+            question_id=question_id,
+            answer_text=answer_text,
+            code=code,
+            diagram_data=diagram_data,
+        )
+        db_session.add(answer)
+
+    return answer
+
+
+def _submission_write_guard(submission, user_id):
+    if submission.user_id != user_id:
+        return jsonify({"error": "Access denied"}), 403
+
+    live_session = get_active_live_session(submission.test, db_session)
+    if auto_submit_if_expired(submission, db_session, live_session):
+        return jsonify({"error": "Time expired. Test has been auto-submitted.", "auto_submitted": True}), 400
+
+    if submission.status == SUBMISSION_STATUS_SUBMITTED:
+        return jsonify({
+            "error": "Cannot modify submitted answers",
+            "already_submitted": True,
+            "auto_submitted": True,
+        }), 400
+
+    return None
+
+
 @bp.route('', methods=['GET'])
 def get_submissions():
     """Get submissions (filtered by user role)."""
@@ -232,59 +279,29 @@ def save_answer(submission_id):
     if not submission:
         return jsonify({"error": "Submission not found"}), 404
     
-    if submission.user_id != user_id:
-        return jsonify({"error": "Access denied"}), 403
+    guard = _submission_write_guard(submission, user_id)
+    if guard:
+        return guard
 
-    live_session = get_active_live_session(submission.test, db_session)
-    if auto_submit_if_expired(submission, db_session, live_session):
-        return jsonify({"error": "Time expired. Test has been auto-submitted.", "auto_submitted": True}), 400
-    
-    if submission.status == SUBMISSION_STATUS_SUBMITTED:
-        return jsonify({
-            "error": "Cannot modify submitted answers",
-            "already_submitted": True,
-            "auto_submitted": True,
-        }), 400
-    
     data = request.get_json()
     question_id = data.get('question_id')
     answer_text = data.get('answer_text')
     code = data.get('code')
     diagram_data = data.get('diagram_data')
-    
+
     if not question_id:
         return jsonify({"error": "question_id is required"}), 400
-    
-    # Verify question is in the test
-    test_question = db_session.query(TestQuestion).filter_by(
-        test_id=submission.test_id, question_id=question_id
-    ).first()
-    if not test_question:
-        return jsonify({"error": "Question not found in test"}), 404
-    
-    # Find or create answer
-    answer = db_session.query(Answer).filter_by(
-        submission_id=submission_id, question_id=question_id
-    ).first()
-    
-    if answer:
-        answer.answer_text = answer_text
-        answer.code = code
-        answer.diagram_data = diagram_data
-        answer.updated_at = datetime.utcnow()
-    else:
-        answer = Answer(
-            submission_id=submission_id,
-            question_id=question_id,
-            answer_text=answer_text,
-            code=code,
-            diagram_data=diagram_data
+
+    try:
+        answer = _upsert_answer(
+            submission_id, submission, question_id, answer_text, code, diagram_data
         )
-        db_session.add(answer)
-    
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
     submission.status = SUBMISSION_STATUS_IN_PROGRESS
     db_session.commit()
-    
+
     return jsonify({
         "id": answer.id,
         "question_id": answer.question_id,
@@ -292,6 +309,53 @@ def save_answer(submission_id):
         "code": answer.code,
         "diagram_data": answer.diagram_data
     }), 200
+
+
+@bp.route('/<int:submission_id>/answers/batch', methods=['POST'])
+def save_answers_batch(submission_id):
+    """Save multiple answers in one transaction (used on submit / manual save)."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    submission = db_session.query(Submission).filter_by(id=submission_id).first()
+    if not submission:
+        return jsonify({"error": "Submission not found"}), 404
+
+    guard = _submission_write_guard(submission, user_id)
+    if guard:
+        return guard
+
+    data = request.get_json() or {}
+    items = data.get('answers')
+    if not isinstance(items, list):
+        return jsonify({"error": "answers array is required"}), 400
+
+    saved = []
+    try:
+        for item in items:
+            question_id = item.get('question_id')
+            if not question_id:
+                continue
+            answer = _upsert_answer(
+                submission_id,
+                submission,
+                question_id,
+                item.get('answer_text'),
+                item.get('code'),
+                item.get('diagram_data'),
+            )
+            saved.append({
+                "id": answer.id,
+                "question_id": answer.question_id,
+            })
+        submission.status = SUBMISSION_STATUS_IN_PROGRESS
+        db_session.commit()
+    except ValueError as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 404
+
+    return jsonify({"saved": len(saved), "answers": saved}), 200
 
 
 @bp.route('/<int:submission_id>/submit', methods=['POST'])

@@ -177,8 +177,9 @@
                 </div>
                 <hr>
                 <button id="saveBtn" class="btn btn-sm btn-outline-secondary w-100">
-                    <i class="fas fa-save me-1"></i>Save progress
+                    <i class="fas fa-save me-1"></i>Save to server
                 </button>
+                <p class="small text-muted mt-2 mb-0">Answers are saved locally as you type. The server is updated when you change questions, every 90s, or when you click Save to server.</p>
             </div>
         </div>
     </div>
@@ -195,6 +196,106 @@ let timerInterval = null;
 let codeEditors = {};
 let currentQuestion = 0;
 let saveStatusTimeout = null;
+let autoSaveTimer = null;
+let serverSyncInterval = null;
+
+const LOCAL_DRAFT_DEBOUNCE_MS = 800;
+const SERVER_SYNC_INTERVAL_MS = 90000;
+
+function getDraftKey() {
+    return submissionId ? 'assessment_draft_' + submissionId : null;
+}
+
+function readLocalDraft() {
+    const key = getDraftKey();
+    if (!key) return null;
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function writeLocalDraft(answersMap) {
+    const key = getDraftKey();
+    if (!key) return;
+    try {
+        localStorage.setItem(key, JSON.stringify({
+            submissionId: submissionId,
+            testId: testId,
+            updatedAt: new Date().toISOString(),
+            answers: answersMap
+        }));
+    } catch (e) {
+        console.warn('Local draft save failed:', e);
+    }
+}
+
+function clearLocalDraft() {
+    const key = getDraftKey();
+    if (key) localStorage.removeItem(key);
+}
+
+function mergeDraftIntoSavedAnswers() {
+    const draft = readLocalDraft();
+    if (!draft || !draft.answers) return;
+    window.savedAnswers = window.savedAnswers || {};
+    Object.keys(draft.answers).forEach(function(qid) {
+        const d = draft.answers[qid];
+        const server = window.savedAnswers[qid];
+        const draftTime = d.updatedAt || draft.updatedAt || '';
+        const serverTime = (server && server.updated_at) || '';
+        if (!server || draftTime >= serverTime) {
+            window.savedAnswers[qid] = Object.assign({}, server || {}, d, { question_id: parseInt(qid, 10) });
+        }
+    });
+}
+
+function applyAnswerToMemory(questionId, answerData) {
+    window.savedAnswers = window.savedAnswers || {};
+    window.savedAnswers[questionId] = Object.assign({}, window.savedAnswers[questionId] || {}, answerData, {
+        question_id: questionId
+    });
+}
+
+function saveCurrentQuestionToLocalDraft() {
+    if (!submissionId || !testData) return;
+    const question = testData.questions[currentQuestion];
+    const answerData = getAnswerDataForQuestion(question);
+    const draft = readLocalDraft();
+    const answersMap = (draft && draft.answers) ? Object.assign({}, draft.answers) : {};
+    if (Object.keys(answerData).length > 0) {
+        answersMap[question.id] = Object.assign({}, answerData, {
+            question_id: question.id,
+            updatedAt: new Date().toISOString()
+        });
+        applyAnswerToMemory(question.id, answerData);
+    }
+    writeLocalDraft(answersMap);
+}
+
+function collectAllAnswerPayloads() {
+    const answers = [];
+    testData.questions.forEach(function(question) {
+        const answerData = getAnswerDataForQuestion(question);
+        if (Object.keys(answerData).length === 0) return;
+        answers.push(Object.assign({ question_id: question.id }, answerData));
+    });
+    return answers;
+}
+
+async function handleSaveErrorResponse(res) {
+    if (res.status !== 400) return false;
+    const err = await res.json();
+    if (err.auto_submitted || err.already_submitted) {
+        if (timerInterval) clearInterval(timerInterval);
+        alert('Time expired. Your test has been auto-submitted.');
+        window.location.href = '/dashboard';
+        return true;
+    }
+    return false;
+}
 
 async function loadTest() {
     try {
@@ -230,6 +331,7 @@ async function loadTest() {
         renderQuestions();
         showQuestion(0);
         attachAnswerListeners();
+        startServerSyncInterval();
 
     } catch (error) {
         console.error('Error loading test:', error);
@@ -287,6 +389,7 @@ async function loadAnswers() {
                 time_expired: submission.time_expired,
                 deadline_at: submission.deadline_at
             };
+            mergeDraftIntoSavedAnswers();
         }
     } catch (error) {
         console.error('Error loading answers:', error);
@@ -467,7 +570,7 @@ function ensureCodeEditor(questionId) {
     codeEditors[questionId] = editor;
     editor.on('change', () => {
         updateNavigation();
-        scheduleAutoSave();
+        scheduleLocalDraft();
     });
     setTimeout(() => editor.refresh(), 50);
 }
@@ -615,7 +718,7 @@ function updateNavigation() {
     });
 }
 
-async function saveCurrentAnswer() {
+async function syncCurrentQuestionToServer(silent) {
     if (!submissionId || !testData) return true;
 
     const question = testData.questions[currentQuestion];
@@ -623,78 +726,66 @@ async function saveCurrentAnswer() {
     if (Object.keys(answerData).length === 0) return true;
 
     answerData.question_id = question.id;
-    setSaveStatus('saving');
+    if (!silent) setSaveStatus('saving');
 
     try {
-        const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
+        const res = await fetch('/api/v1/submissions/' + submissionId + '/answers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(answerData)
         });
-        if (res.status === 400) {
-            const err = await res.json();
-            if (err.auto_submitted || err.already_submitted) {
-                if (timerInterval) clearInterval(timerInterval);
-                alert('Time expired. Your test has been auto-submitted.');
-                window.location.href = '/dashboard';
-                return false;
-            }
-        }
+        if (await handleSaveErrorResponse(res)) return false;
         if (res.ok) {
-            window.savedAnswers = window.savedAnswers || {};
-            window.savedAnswers[question.id] = { ...window.savedAnswers[question.id], ...answerData, question_id: question.id };
-            setSaveStatus('saved');
+            applyAnswerToMemory(question.id, answerData);
+            if (!silent) setSaveStatus('saved');
             updateNavigation();
         }
     } catch (error) {
         console.error('Error saving answer:', error);
-        setSaveStatus('');
+        if (!silent) setSaveStatus('');
     }
     return true;
 }
 
-async function saveProgress(silent = false) {
-    if (!submissionId) return false;
+async function syncAllAnswersToServer(silent) {
+    if (!submissionId || !testData) return false;
+
+    saveCurrentQuestionToLocalDraft();
+    const answers = collectAllAnswerPayloads();
+    if (answers.length === 0) return true;
 
     setSaveStatus('saving');
-    for (const question of testData.questions) {
-        const answerData = getAnswerDataForQuestion(question);
-        if (Object.keys(answerData).length === 0) continue;
-
-        answerData.question_id = question.id;
-        try {
-            const res = await fetch(`/api/v1/submissions/${submissionId}/answers`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(answerData)
+    try {
+        const res = await fetch('/api/v1/submissions/' + submissionId + '/answers/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ answers: answers })
+        });
+        if (await handleSaveErrorResponse(res)) return false;
+        if (res.ok) {
+            answers.forEach(function(a) {
+                applyAnswerToMemory(a.question_id, a);
             });
-            if (res.status === 400) {
-                const err = await res.json();
-                if (err.auto_submitted || err.already_submitted) {
-                    if (timerInterval) clearInterval(timerInterval);
-                    alert('Time expired. Your test has been auto-submitted.');
-                    window.location.href = '/dashboard';
-                    return false;
-                }
+            updateNavigation();
+            setSaveStatus('saved');
+            if (!silent) {
+                clearTimeout(saveStatusTimeout);
+                saveStatusTimeout = setTimeout(function() { setSaveStatus(''); }, 2000);
             }
-            if (res.ok) {
-                window.savedAnswers = window.savedAnswers || {};
-                window.savedAnswers[question.id] = { ...window.savedAnswers[question.id], ...answerData, question_id: question.id };
-            }
-        } catch (error) {
-            console.error('Error saving answer:', error);
+            return true;
         }
+    } catch (error) {
+        console.error('Error saving answers:', error);
+        setSaveStatus('');
     }
+    return false;
+}
 
-    updateNavigation();
-    setSaveStatus('saved');
-    if (!silent) {
-        clearTimeout(saveStatusTimeout);
-        saveStatusTimeout = setTimeout(() => setSaveStatus(''), 2000);
-    }
-    return true;
+async function hybridSaveBeforeLeave() {
+    saveCurrentQuestionToLocalDraft();
+    return syncCurrentQuestionToServer(true);
 }
 
 function setSaveStatus(state) {
@@ -702,23 +793,40 @@ function setSaveStatus(state) {
     el.className = 'save-status';
     if (state === 'saving') {
         el.classList.add('saving');
-        el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+        el.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving to server...';
     } else if (state === 'saved') {
         el.classList.add('saved');
-        el.innerHTML = '<i class="fas fa-check me-1"></i>Saved';
+        el.innerHTML = '<i class="fas fa-check me-1"></i>Saved on server';
         clearTimeout(saveStatusTimeout);
-        saveStatusTimeout = setTimeout(() => {
+        saveStatusTimeout = setTimeout(function() {
             if (el.classList.contains('saved')) setSaveStatus('');
         }, 2500);
+    } else if (state === 'draft') {
+        el.classList.add('saved');
+        el.innerHTML = '<i class="fas fa-laptop me-1"></i>Saved locally';
+        clearTimeout(saveStatusTimeout);
+        saveStatusTimeout = setTimeout(function() {
+            if (el.textContent.indexOf('locally') !== -1) setSaveStatus('');
+        }, 1500);
     } else {
         el.textContent = '';
     }
 }
 
-let autoSaveTimer = null;
-function scheduleAutoSave() {
+function scheduleLocalDraft() {
     clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(() => saveCurrentAnswer(), 1500);
+    autoSaveTimer = setTimeout(function() {
+        saveCurrentQuestionToLocalDraft();
+        setSaveStatus('draft');
+        updateNavigation();
+    }, LOCAL_DRAFT_DEBOUNCE_MS);
+}
+
+function startServerSyncInterval() {
+    if (serverSyncInterval) clearInterval(serverSyncInterval);
+    serverSyncInterval = setInterval(function() {
+        syncCurrentQuestionToServer(true);
+    }, SERVER_SYNC_INTERVAL_MS);
 }
 
 function attachAnswerListeners() {
@@ -728,7 +836,7 @@ function attachAnswerListeners() {
             document.querySelectorAll(`input[name="answer-mc-${question.id}"]`).forEach(input => {
                 input.addEventListener('change', () => {
                     updateNavigation();
-                    scheduleAutoSave();
+                    scheduleLocalDraft();
                 });
             });
         }
@@ -737,7 +845,7 @@ function attachAnswerListeners() {
             if (textEl) {
                 textEl.addEventListener('input', () => {
                     updateNavigation();
-                    scheduleAutoSave();
+                    scheduleLocalDraft();
                 });
             }
         }
@@ -758,21 +866,21 @@ function showQuestion(index) {
 
 async function goToQuestion(index) {
     if (index === currentQuestion) return;
-    const ok = await saveCurrentAnswer();
+    const ok = await hybridSaveBeforeLeave();
     if (!ok) return;
     showQuestion(index);
 }
 
 async function goNext() {
     if (currentQuestion >= testData.questions.length - 1) return;
-    const ok = await saveCurrentAnswer();
+    const ok = await hybridSaveBeforeLeave();
     if (!ok) return;
     showQuestion(currentQuestion + 1);
 }
 
 async function goPrev() {
     if (currentQuestion <= 0) return;
-    const ok = await saveCurrentAnswer();
+    const ok = await hybridSaveBeforeLeave();
     if (!ok) return;
     showQuestion(currentQuestion - 1);
 }
@@ -812,7 +920,7 @@ async function submitTest(skipConfirm = false) {
         return;
     }
 
-    const saved = await saveProgress(true);
+    const saved = await syncAllAnswersToServer(true);
     if (!saved) return;
 
     try {
@@ -830,6 +938,8 @@ async function submitTest(skipConfirm = false) {
                 alert('Time expired. Your test has been auto-submitted.');
             }
             if (timerInterval) clearInterval(timerInterval);
+            if (serverSyncInterval) clearInterval(serverSyncInterval);
+            clearLocalDraft();
             window.location.href = '/dashboard';
         } else {
             if ((data && data.already_submitted) || (data && data.auto_submitted)) {
@@ -882,7 +992,7 @@ function initCanvas(questionId) {
         if (canvasDrawing[questionId]) {
             canvasDrawing[questionId] = false;
             updateNavigation();
-            scheduleAutoSave();
+            scheduleLocalDraft();
         }
     };
 
@@ -899,7 +1009,7 @@ function clearCanvas(questionId) {
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
     updateNavigation();
-    scheduleAutoSave();
+    scheduleLocalDraft();
 }
 
 function loadCanvas(questionId, dataUrl) {
@@ -926,7 +1036,7 @@ window.addEventListener('resize', () => {
 
 document.getElementById('prevBtn').addEventListener('click', goPrev);
 document.getElementById('nextBtn').addEventListener('click', goNext);
-document.getElementById('saveBtn').addEventListener('click', () => saveProgress(false));
+document.getElementById('saveBtn').addEventListener('click', () => syncAllAnswersToServer(false));
 document.getElementById('submitBtn').addEventListener('click', () => submitTest(false));
 
 document.addEventListener('keydown', (e) => {
@@ -934,8 +1044,6 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') goPrev();
     if (e.key === 'ArrowRight') goNext();
 });
-
-setInterval(() => saveProgress(true), 30000);
 
 loadTest();
 </script>
