@@ -40,8 +40,7 @@ def login(session, base_url, username, password):
         raise RuntimeError(f"{username} is not a student account")
 
 
-def create_student_via_register(session, base_url, username, password, lecturer_user, lecturer_pass):
-    """Register student using lecturer session (setup helper)."""
+def lecturer_session(base_url, lecturer_user, lecturer_pass):
     lect = requests.Session()
     lr = lect.post(
         f"{base_url}/api/v1/auth/login",
@@ -49,7 +48,13 @@ def create_student_via_register(session, base_url, username, password, lecturer_
         timeout=30,
     )
     if lr.status_code != 200:
-        raise RuntimeError("Lecturer login failed for student setup")
+        raise RuntimeError("Lecturer/admin login failed")
+    return lect
+
+
+def create_student_via_register(base_url, username, password, lecturer_user, lecturer_pass):
+    """Register student using lecturer session (setup helper)."""
+    lect = lecturer_session(base_url, lecturer_user, lecturer_pass)
     sr = lect.post(
         f"{base_url}/api/v1/auth/register",
         json={"username": username, "password": password, "student_id": username.upper()},
@@ -59,6 +64,24 @@ def create_student_via_register(session, base_url, username, password, lecturer_
         if "already exists" in sr.text:
             return
         raise RuntimeError(f"Register {username} failed: {sr.status_code} {sr.text[:200]}")
+
+
+def reset_stress_attempts(base_url, test_id, usernames, lecturer_user, lecturer_pass):
+    """Delete stress students' submissions for this test so they can start again."""
+    lect = lecturer_session(base_url, lecturer_user, lecturer_pass)
+    names = set(usernames)
+    sr = lect.get(f"{base_url}/api/v1/submissions?test_id={test_id}", timeout=30)
+    if sr.status_code != 200:
+        raise RuntimeError(f"Could not list submissions: {sr.status_code} {sr.text[:200]}")
+    reset_count = 0
+    for item in sr.json():
+        if item.get("username") not in names:
+            continue
+        rr = lect.post(f"{base_url}/api/v1/submissions/{item['id']}/reset", timeout=30)
+        if rr.status_code != 200:
+            raise RuntimeError(f"Reset {item.get('username')} failed: {rr.status_code} {rr.text[:200]}")
+        reset_count += 1
+    print(f"Reset {reset_count} previous stress submissions for test {test_id}.")
 
 
 def student_run(base_url, username, password, test_id, duration_sec, sync_interval_sec):
@@ -77,14 +100,28 @@ def student_run(base_url, username, password, test_id, duration_sec, sync_interv
         if not questions:
             raise RuntimeError("Test has no questions")
 
-        sr = session.post(
-            f"{base_url}/api/v1/submissions",
-            json={"test_id": test_id},
+        existing = session.get(
+            f"{base_url}/api/v1/submissions?test_id={test_id}",
             timeout=30,
         )
-        if sr.status_code not in (200, 201):
-            raise RuntimeError(f"Create submission failed: {sr.status_code} {sr.text[:200]}")
-        submission_id = sr.json()["id"]
+        submission_id = None
+        if existing.status_code == 200:
+            in_progress = next(
+                (s for s in existing.json() if s.get("status") == "in_progress"),
+                None,
+            )
+            if in_progress:
+                submission_id = in_progress["id"]
+
+        if submission_id is None:
+            sr = session.post(
+                f"{base_url}/api/v1/submissions",
+                json={"test_id": test_id},
+                timeout=30,
+            )
+            if sr.status_code not in (200, 201):
+                raise RuntimeError(f"Create submission failed: {sr.status_code} {sr.text[:200]}")
+            submission_id = sr.json()["id"]
 
         q_index = 0
         last_nav_save = time.time()
@@ -169,6 +206,11 @@ def main():
     parser.add_argument("--duration", type=int, default=120, help="Seconds each virtual student runs")
     parser.add_argument("--sync-interval", type=int, default=90, help="Match hybrid server sync interval")
     parser.add_argument("--create-students", action="store_true", help="Create stress users via lecturer API")
+    parser.add_argument(
+        "--reset-attempts",
+        action="store_true",
+        help="Reset stress students' submissions for this test so they can retake it",
+    )
     parser.add_argument("--lecturer-user", default="admin")
     parser.add_argument("--lecturer-password", default="admin")
     args = parser.parse_args()
@@ -177,13 +219,21 @@ def main():
 
     if args.create_students:
         print("Creating student accounts...")
-        setup = requests.Session()
         for name in usernames:
             create_student_via_register(
-                setup, args.base_url, name, args.password,
+                args.base_url, name, args.password,
                 args.lecturer_user, args.lecturer_password,
             )
         print(f"Ensured {len(usernames)} student accounts exist.")
+
+    if args.reset_attempts:
+        reset_stress_attempts(
+            args.base_url,
+            args.test_id,
+            usernames,
+            args.lecturer_user,
+            args.lecturer_password,
+        )
 
     print(f"Stress test: {args.users} users, test_id={args.test_id}, {args.duration}s each")
     print(f"Target: {args.base_url}")

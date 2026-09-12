@@ -241,7 +241,8 @@ This creates `stress1` … `stress15` with password `stress123` (override with `
 **3. Run the load test**
 
 ```bash
-python scripts/stress_test.py --base-url http://127.0.0.1:5000 --test-id 1 --users 15 --duration 120
+python scripts/stress_test.py --test-id 1 --users 15 --duration 120 --reset-attempts \
+  --lecturer-user admin --lecturer-password YOUR_ADMIN_PASSWORD
 ```
 
 Each virtual student logs in, starts the test, saves answers on a hybrid-like schedule, batch-saves, and submits. Summary prints OK/FAIL per user.
